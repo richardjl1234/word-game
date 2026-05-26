@@ -1,0 +1,332 @@
+/* ===== Keyframe Animations ===== */
+
+/* Word Bubble Animations */
+@keyframes wordHit {
+    0% {
+        transform: scale(1);
+        opacity: 1;
+    }
+    50% {
+        transform: scale(1.5);
+        opacity: 0.8;
+    }
+    100% {
+        transform: scale(0);
+        opacity: 0;
+    }
+}
+
+@keyframes wordMiss {
+    0% {
+        transform: translateY(0);
+        opacity: 1;
+    }
+    100% {
+        transform: translateY(100px);
+        opacity: 0;
+    }
+}
+
+/* Word Bubble Styles */
+.word-bubble {
+    /* JS controls position for falling */
+}
+
+.word-bubble.hit {
+    animation: wordHit 0.3s ease-out forwards;
+}
+
+.word-bubble.miss {
+    animation: wordMiss 0.5s ease-in forwards;
+}
+
+/* Score Popup Animation */
+@keyframes scorePopup {
+    0% {
+        transform: translateY(0) scale(1);
+        opacity: 1;
+    }
+    100% {
+        transform: translateY(-50px) scale(1.5);
+        opacity: 0;
+    }
+}
+
+.score-popup {
+    position: absolute;
+    font-size: 1.5rem;
+    font-weight: 700;
+    animation: scorePopup 0.8s ease-out forwards;
+    pointer-events: none;
+    z-index: 60;
+}
+
+.score-popup.positive {
+    color: #27AE60;
+}
+
+.score-popup.negative {
+    color: #E74C3C;
+}
+
+.score-popup.combo {
+    color: #F39C12;
+}
+
+/* Combo Animation */
+@keyframes comboPulse {
+    0% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.3);
+    }
+    100% {
+        transform: scale(1);
+    }
+}
+
+.combo-pulse {
+    animation: comboPulse 0.3s ease-in-out;
+}
+
+/* Screen Transitions */
+@keyframes fadeIn {
+    0% {
+        opacity: 0;
+        transform: scale(0.95);
+    }
+    100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+@keyframes fadeOut {
+    0% {
+        opacity: 1;
+        transform: scale(1);
+    }
+    100% {
+        opacity: 0;
+        transform: scale(0.95);
+    }
+}
+
+.screen {
+    animation: fadeIn 0.4s ease-out;
+}
+
+.screen.fade-out {
+    animation: fadeOut 0.3s ease-in forwards;
+}
+
+/* Win Celebration */
+@keyframes celebrationBounce {
+    0%, 100% {
+        transform: translateY(0);
+    }
+    25% {
+        transform: translateY(-30px) rotate(-5deg);
+    }
+    75% {
+        transform: translateY(-30px) rotate(5deg);
+    }
+}
+
+.celebration {
+    animation: celebrationBounce 0.6s ease-in-out infinite;
+}
+
+/* Particle Effect */
+@keyframes particleFloat {
+    0% {
+        transform: translateY(0) translateX(0) scale(1);
+        opacity: 1;
+    }
+    100% {
+        transform: translateY(-100px) translateX(var(--drift-x, 50px)) scale(0);
+        opacity: 0;
+    }
+}
+
+.particle {
+    position: absolute;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    animation: particleFloat 1s ease-out forwards;
+    pointer-events: none;
+}
+
+/* Background Animations */
+@keyframes cloudFloat {
+    0% {
+        transform: translateX(-100%);
+    }
+    100% {
+        transform: translateX(calc(100vw + 100%));
+    }
+}
+
+.cloud {
+    position: absolute;
+    background: rgba(255, 255, 255, 0.8);
+    border-radius: 50%;
+    animation: cloudFloat linear infinite;
+}
+
+.cloud::before, .cloud::after {
+    content: '';
+    position: absolute;
+    background: rgba(255, 255, 255, 0.8);
+    border-radius: 50%;
+}
+
+/* Heart/Life Animation */
+@keyframes heartBeat {
+    0%, 100% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.2);
+    }
+}
+
+.heart-lost {
+    animation: heartBeat 0.5s ease-in-out;
+    color: #E74C3C;
+}
+
+/* Progress Bar Animation */
+@keyframes progressGrow {
+    0% {
+        width: 0%;
+    }
+    100% {
+        width: var(--progress-width, 0%);
+    }
+}
+
+.progress-bar {
+    animation: progressGrow 0.5s ease-out forwards;
+}
+
+/* Shake Animation for Wrong Answer */
+@keyframes shake {
+    0%, 100% {
+        transform: translateX(0);
+    }
+    20%, 60% {
+        transform: translateX(-10px);
+    }
+    40%, 80% {
+        transform: translateX(10px);
+    }
+}
+
+.shake {
+    animation: shake 0.4s ease-in-out;
+}
+
+/* Glow Effect for Success */
+@keyframes successGlow {
+    0% {
+        box-shadow: 0 0 0 0 rgba(39, 174, 96, 0.7);
+    }
+    50% {
+        box-shadow: 0 0 30px 10px rgba(39, 174, 96, 0.5);
+    }
+    100% {
+        box-shadow: 0 0 0 0 rgba(39, 174, 96, 0);
+    }
+}
+
+.success-glow {
+    animation: successGlow 0.6s ease-out;
+}
+
+/* Meaning Bubble Animations */
+@keyframes meaningChange {
+    0% {
+        transform: scale(0.8) rotateY(90deg);
+        opacity: 0;
+    }
+    100% {
+        transform: scale(1) rotateY(0deg);
+        opacity: 1;
+    }
+}
+
+.meaning-change {
+    animation: meaningChange 0.4s ease-out;
+}
+
+/* Loading Spinner */
+@keyframes spin {
+    0% {
+        transform: rotate(0deg);
+    }
+    100% {
+        transform: rotate(360deg);
+    }
+}
+
+.spinner {
+    width: 50px;
+    height: 50px;
+    border: 5px solid rgba(255, 255, 255, 0.3);
+    border-top-color: var(--primary-color);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+/* Level Button Unlock Animation */
+@keyframes unlockPop {
+    0% {
+        transform: scale(0);
+        opacity: 0;
+    }
+    70% {
+        transform: scale(1.2);
+        opacity: 1;
+    }
+    100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+.unlock-pop {
+    animation: unlockPop 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+}
+
+/* Stars Animation */
+@keyframes starTwinkle {
+    0%, 100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+    50% {
+        opacity: 0.5;
+        transform: scale(0.8);
+    }
+}
+
+.star {
+    animation: starTwinkle 1.5s ease-in-out infinite;
+}
+
+/* Rainbow effect for title */
+@keyframes rainbow {
+    0% {
+        filter: hue-rotate(0deg);
+    }
+    100% {
+        filter: hue-rotate(360deg);
+    }
+}
+
+.rainbow {
+    animation: rainbow 3s linear infinite;
+}

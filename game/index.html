@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>英语单词闯关游戏 - 教育魔法岛</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Comic+Neue:wght@400;700&family=Quicksand:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/animations.css">
+</head>
+<body>
+    <div id="game-container">
+        <!-- 开始界面 -->
+        <div id="start-screen" class="screen active">
+            <div class="title-container">
+                <h1 class="game-title">🌟 教育魔法岛 🌟</h1>
+                <h2 class="game-subtitle">英语单词闯关挑战</h2>
+            </div>
+            <div class="start-buttons">
+                <div class="word-count-setting">
+                    <label for="words-per-level">每关需要匹配：</label>
+                    <select id="words-per-level">
+                        <option value="10">10 个单词</option>
+                        <option value="15">15 个单词</option>
+                        <option value="20">20 个单词</option>
+                        <option value="25" selected>25 个单词</option>
+                        <option value="30">30 个单词</option>
+                        <option value="40">40 个单词</option>
+                        <option value="50">50 个单词</option>
+                    </select>
+                </div>
+                <div class="word-count-setting">
+                    <label for="lives-count">生命次数：</label>
+                    <select id="lives-count">
+                        <option value="1">1 次</option>
+                        <option value="2">2 次</option>
+                        <option value="3">3 次</option>
+                        <option value="4" selected>4 次</option>
+                        <option value="5">5 次</option>
+                        <option value="10">10 次</option>
+                        <option value="999">无限</option>
+                    </select>
+                </div>
+                <div class="word-count-setting">
+                    <label for="speed-setting">下落速度：</label>
+                    <select id="speed-setting">
+                        <option value="0.25">极慢</option>
+                        <option value="0.5">很慢</option>
+                        <option value="0.75">慢速</option>
+                        <option value="1" selected>正常</option>
+                        <option value="1.5">中快</option>
+                        <option value="2">快速</option>
+                        <option value="3">很快</option>
+                        <option value="4">极快</option>
+                    </select>
+                </div>
+                <button id="btn-start" class="btn-primary">开始游戏</button>
+                <button id="btn-levels" class="btn-secondary" onclick="console.log('Levels clicked!'); game.showLevelSelect();">选择关卡</button>
+                <button id="btn-about" class="btn-secondary" onclick="console.log('About clicked!'); game.showScreen('about-screen');">游戏说明</button>
+            </div>
+        </div>
+
+        <!-- 关卡选择界面 -->
+        <div id="level-select-screen" class="screen">
+            <div class="level-header">
+                <h2>选择关卡</h2>
+                <button id="btn-back-from-levels" class="btn-back">← 返回</button>
+            </div>
+            <div class="level-grid" id="level-grid">
+                <!-- 动态生成50个关卡按钮 -->
+            </div>
+        </div>
+
+        <!-- 游戏说明界面 -->
+        <div id="about-screen" class="screen">
+            <div class="about-header">
+                <h2>游戏说明</h2>
+                <button id="btn-back-from-about" class="btn-back">← 返回</button>
+            </div>
+            <div class="about-content">
+                <div class="about-section">
+                    <h3>🎮 游戏玩法</h3>
+                    <p>单词气泡从屏幕上方飘落，你需要将它们与下方的中文释义进行匹配。</p>
+                    <ul>
+                        <li>移动鼠标或手指点击单词气泡</li>
+                        <li>匹配正确即可消除单词并得分</li>
+                        <li>匹配错误会扣分或扣血</li>
+                        <li>单词落地也会扣分/扣血</li>
+                    </ul>
+                </div>
+                <div class="about-section">
+                    <h3>📊 难度分级</h3>
+                    <ul>
+                        <li>🌱 简单级（L1-L10）：3-5字母的常用单词</li>
+                        <li>🌿 中等级（L11-L30）：5-8字母的单词</li>
+                        <li>🌳 较难级（L31-L50）：8+字母的复杂单词</li>
+                    </ul>
+                </div>
+                <div class="about-section">
+                    <h3>💡 提示</h3>
+                    <p>随着关卡提升，单词下落速度会加快，同时出现的单词数量也会增加！</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 游戏主界面 -->
+        <div id="game-screen" class="screen">
+            <div class="game-header">
+                <div class="stats-left">
+                    <span id="score">得分: 0</span>
+                    <span id="combo">连击: x0</span>
+                </div>
+                <div class="level-info">
+                    <span id="current-level">关卡 1</span>
+                    <span id="progress">0/20</span>
+                </div>
+                <div class="stats-right">
+                    <span id="lives">剩余次数: 4</span>
+                </div>
+            </div>
+
+            <div id="game-area">
+                <!-- 顶部单词下落区域 -->
+                <div id="word-area"></div>
+
+                <!-- 底部匹配区域 -->
+                <div id="meaning-area">
+                    <div id="current-meaning" class="meaning-bubble">
+                        <span id="meaning-text">点击开始</span>
+                    </div>
+                </div>
+
+                <!-- 动画播放区域 -->
+                <div id="animation-layer"></div>
+            </div>
+
+            <div class="game-footer">
+                <button id="btn-pause" class="btn-icon">⏸️</button>
+                <button id="btn-quit" class="btn-icon">🚪</button>
+                <button id="btn-sound" class="btn-icon">🔊</button>
+            </div>
+        </div>
+
+        <!-- 暂停界面 -->
+        <div id="pause-screen" class="screen overlay">
+            <div class="pause-content">
+                <h2>⏸️ 游戏暂停</h2>
+                <button id="btn-resume" class="btn-primary">继续游戏</button>
+                <button id="btn-restart" class="btn-secondary">重新开始</button>
+                <button id="btn-quit-to-menu" class="btn-secondary">返回主菜单</button>
+            </div>
+        </div>
+
+        <!-- 过关界面 -->
+        <div id="win-screen" class="screen overlay">
+            <div class="win-content">
+                <h2>🎉 恭喜过关！</h2>
+                <div class="win-stats">
+                    <p>最终得分: <span id="final-score">0</span></p>
+                    <p>最高连击: <span id="max-combo">0</span></p>
+                </div>
+                <button id="btn-next-level" class="btn-primary">下一关</button>
+                <button id="btn-back-to-menu" class="btn-secondary">返回主菜单</button>
+            </div>
+        </div>
+
+        <!-- 游戏结束界面 -->
+        <div id="gameover-screen" class="screen overlay">
+            <div class="gameover-content">
+                <h2>💔 游戏结束</h2>
+                <div class="gameover-stats">
+                    <p>最终得分: <span id="gameover-score">0</span></p>
+                    <p>关卡进度: <span id="gameover-level">1</span></p>
+                </div>
+                <button id="btn-retry" class="btn-primary">再试一次</button>
+                <button id="btn-back-to-menu-from-over" class="btn-secondary">返回主菜单</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="lib/lottie.min.js"></script>
+    <script src="js/soundManager.js"></script>
+    <script src="js/animationPlayer.js"></script>
+    <script src="js/wordManager.js"></script>
+    <script src="js/collision.js"></script>
+    <script src="js/game.js"></script>
+</body>
+</html>
