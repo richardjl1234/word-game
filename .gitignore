@@ -1,0 +1,33 @@
+# API 密钥配置（含密钥，禁止提交）
+game/js/config.js
+.env
+.env.local
+
+# Python
+__pycache__/
+*.py[cod]
+*.so
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+
+# OS
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# IDE
+.vscode/
+.idea/
+*.sublime-*
+
+# Generated audio files
+game/sounds/
+
+# Environment
+.env
+.env.local
