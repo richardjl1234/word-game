@@ -16,9 +16,10 @@ class SoundManager {
     }
 
     async init() {
-        // 从环境变量加载MiniMax配置
-        this.minimaxApiKey = 'MINIMAX_API_KEY';
-        this.minimaxGroupId = 'MINIMAX_GROUP_ID';
+        // 从 config.js 加载 MiniMax 配置（不提交到仓库）
+        const config = window.MINIMAX_CONFIG || {};
+        this.minimaxApiKey = config.apiKey || '';
+        this.minimaxGroupId = config.groupId || '';
 
         // 初始化Web Audio API
         try {

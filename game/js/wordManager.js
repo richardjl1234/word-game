@@ -265,23 +265,18 @@ class WordManager {
     }
 
     getLevelWords(level) {
-        const startIndex = (level - 1) * this.wordsPerLevel;
-        const endIndex = startIndex + this.wordsPerLevel;
+        // 按 difficulty 字段精确匹配关卡
+        let range = 0;
+        let levelWords = [];
 
-        // 过滤出属于该级别的单词
-        const levelWords = this.wordsData.filter((w, i) => {
-            const wordLevel = Math.ceil((i + 1) / this.wordsPerLevel);
-            return wordLevel === level;
-        });
-
-        // 如果没有精确匹配，按难度筛选
-        if (levelWords.length === 0) {
-            const minDifficulty = Math.floor((level - 1) / 5) + 1;
-            const maxDifficulty = Math.ceil(level / 5);
-
-            return this.wordsData
-                .filter(w => w.difficulty >= minDifficulty && w.difficulty <= maxDifficulty)
-                .slice(0, this.wordsPerLevel);
+        // 逐步扩大难度范围，直到凑够每关所需单词数
+        while (levelWords.length < this.wordsPerLevel && range <= 10) {
+            const minDifficulty = Math.max(1, level - range);
+            const maxDifficulty = Math.min(50, level + range);
+            levelWords = this.wordsData.filter(
+                w => w.difficulty >= minDifficulty && w.difficulty <= maxDifficulty
+            );
+            range++;
         }
 
         return levelWords.slice(0, this.wordsPerLevel);

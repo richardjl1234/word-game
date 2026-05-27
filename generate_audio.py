@@ -5,15 +5,16 @@
 """
 
 import os
+import sys
 import json
 import requests
 import time
 import concurrent.futures
 from pathlib import Path
 
-# MiniMax API配置
-API_KEY = "MINIMAX_API_KEY"
-GROUP_ID = "MINIMAX_GROUP_ID"
+# MiniMax API配置 - 从环境变量读取
+API_KEY = os.environ.get('MINIMAX_API_KEY', '')
+GROUP_ID = os.environ.get('MINIMAX_GROUP_ID', '')
 VOICE_ID = "Chinese (Mandarin)_Cute_Spirit"
 API_URL = "https://api.minimax.chat/v1/t2a_v2"
 
@@ -63,6 +64,10 @@ def generate_word_audio(word_data):
         return {"word": word, "id": word_id, "status": "error", "error": str(e)}
 
 def main():
+    if not API_KEY:
+        print("错误：未设置 MINIMAX_API_KEY 环境变量")
+        print("请先设置环境变量: export MINIMAX_API_KEY='your-key'")
+        sys.exit(1)
     # 确保输出目录存在
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
