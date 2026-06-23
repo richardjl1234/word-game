@@ -666,6 +666,8 @@ class Game {
             // 立即强制生成目标单词
             this.forceSpawnTarget();
             this.updateUI();
+            // 重新校准手柄焦点到新目标单词（避免前一个聚焦的单词被清除后无单词高亮）
+            this.refocusOnTarget();
         }
     }
 
@@ -725,11 +727,16 @@ class Game {
         if (element) {
             setTimeout(() => {
                 if (element.parentNode) element.parentNode.removeChild(element);
+                // DOM 移除后重新校准焦点：选错的单词消失，需要重新定位到目标单词
+                this.refocusOnTarget();
             }, 500);
         }
 
         if (this.maxErrors < 999 && this.errorCount >= this.maxErrors) {
             this.handleGameOver();
+        } else {
+            // 即使 DOM 还没移除，先重新校准焦点（focusedIndex 可能指向被标记 wrong 的单词）
+            this.refocusOnTarget();
         }
     }
 
@@ -767,6 +774,8 @@ class Game {
                     this.accelerateDrops();
                     this.forceSpawnTarget();
                     this.updateUI();
+                    // 重新校准手柄焦点到新目标单词
+                    this.refocusOnTarget();
                 }, 600);
             }
         }
@@ -999,6 +1008,33 @@ class Game {
         if (alive[this.focusedIndex]) {
             alive[this.focusedIndex].element.classList.add('focused');
         }
+    }
+
+    /**
+     * 重新校准手柄焦点：找到当前 targetMeaning 在 alive 列表中的位置，
+     * 设置 focusedIndex 指向它，再 applyWordFocus。
+     * 用于：handleCorrectMatch / handleWrongMatch / handleMiss 之后，
+     * 单词列表发生变化，需要保证至少有 1 个候选单词被高亮。
+     * 如果找不到目标（被加速下落或尚未生成），退回到第一个 alive 单词。
+     */
+    refocusOnTarget() {
+        const alive = this.aliveWordBubbles();
+        if (alive.length === 0) {
+            this.focusedIndex = 0;
+            return;
+        }
+        // 优先指向目标单词
+        if (this.targetMeaning) {
+            const idx = alive.findIndex(w => w.data.word === this.targetMeaning.word);
+            if (idx >= 0) {
+                this.focusedIndex = idx;
+                this.applyWordFocus();
+                return;
+            }
+        }
+        // 找不到目标则指向第一个 alive 单词（保证总有高亮）
+        this.focusedIndex = 0;
+        this.applyWordFocus();
     }
 
     aliveWordBubbles() {
