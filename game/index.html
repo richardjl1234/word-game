@@ -7,8 +7,8 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Comic+Neue:wght@400;700&family=Quicksand:wght@400;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="css/style.css?v=20">
-    <link rel="stylesheet" href="css/animations.css?v=20">
+    <link rel="stylesheet" href="css/style.css?v=21">
+    <link rel="stylesheet" href="css/animations.css?v=21">
 </head>
 <body>
     <!-- 全局背景装饰（在所有界面显示） -->
@@ -35,6 +35,11 @@
                 <h2 class="game-subtitle">英语单词闯关挑战</h2>
             </div>
             <div class="start-buttons">
+                <div class="current-player-display" id="current-player-display">
+                    <span class="current-player-label">当前玩家：</span>
+                    <span id="current-player-name">未设置</span>
+                    <button id="btn-edit-name" class="btn-edit-name" type="button">✏️ 修改</button>
+                </div>
                 <div class="word-count-setting">
                     <label for="words-per-level">每关需要匹配：</label>
                     <div class="setting-stepper" id="stepper-words-per-level" data-target="words-per-level">
@@ -90,6 +95,7 @@
                 </div>
                 <button id="btn-start" class="btn-primary">开始游戏</button>
                 <button id="btn-levels" class="btn-secondary" onclick="console.log('Levels clicked!'); game.showLevelSelect();">选择关卡</button>
+                <button id="btn-ranking" class="btn-secondary">🏆 排行榜</button>
                 <button id="btn-about" class="btn-secondary" onclick="console.log('About clicked!'); game.showScreen('about-screen');">游戏说明</button>
             </div>
         </div>
@@ -223,15 +229,42 @@
                 <button id="btn-back-to-menu-from-over" class="btn-secondary">返回主菜单</button>
             </div>
         </div>
+
+        <!-- 排行榜界面 -->
+        <div id="ranking-screen" class="screen">
+            <div class="ranking-header">
+                <h2>🏆 排行榜</h2>
+                <button id="btn-back-from-ranking" class="btn-back">← 返回</button>
+            </div>
+            <div class="ranking-content">
+                <div class="ranking-list" id="ranking-list">
+                    <!-- 动态生成排行榜条目 -->
+                </div>
+                <button id="btn-clear-ranking" class="btn-secondary btn-clear-ranking">清空排行榜</button>
+            </div>
+        </div>
+
+        <!-- 姓名输入弹窗（modal） -->
+        <div id="name-input-modal" class="modal">
+            <div class="modal-content">
+                <h3 id="name-modal-title">请输入你的名字</h3>
+                <p class="modal-hint">名字将显示在排行榜中</p>
+                <input type="text" id="player-name-input" maxlength="20" placeholder="你的名字（最多20字）" autocomplete="off">
+                <div class="modal-buttons">
+                    <button id="btn-confirm-name" class="btn-primary">确定</button>
+                    <button id="btn-cancel-name" class="btn-secondary">取消</button>
+                </div>
+            </div>
+        </div>
     </div>
 
-    <script src="lib/lottie.min.js?v=20"></script>
-    <script src="js/soundManager.js?v=20"></script>
-    <script src="js/animationPlayer.js?v=20"></script>
-    <script src="js/backgroundAnimator.js?v=20"></script>
-    <script src="js/wordManager.js?v=20"></script>
-    <script src="js/collision.js?v=20"></script>
-    <script src="js/game.js?v=20"></script>
-    <script src="js/gamepadController.js?v=20"></script>
+    <script src="lib/lottie.min.js?v=21"></script>
+    <script src="js/soundManager.js?v=21"></script>
+    <script src="js/animationPlayer.js?v=21"></script>
+    <script src="js/backgroundAnimator.js?v=21"></script>
+    <script src="js/wordManager.js?v=21"></script>
+    <script src="js/collision.js?v=21"></script>
+    <script src="js/game.js?v=21"></script>
+    <script src="js/gamepadController.js?v=21"></script>
 </body>
 </html>

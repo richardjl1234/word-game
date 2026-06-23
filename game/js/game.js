@@ -74,6 +74,9 @@ class Game {
 
         // 显示初始界面
         this.showScreen('start-screen');
+
+        // 同步当前玩家显示
+        this.updateCurrentPlayerDisplay();
     }
 
     cacheElements() {
@@ -102,13 +105,25 @@ class Game {
 
     bindEvents() {
         // 主菜单按钮
-        document.getElementById('btn-start')?.addEventListener('click', () => this.startGame(1));
+        document.getElementById('btn-start')?.addEventListener('click', () => this.requestNameThenStart(1));
         document.getElementById('btn-levels')?.addEventListener('click', () => this.showLevelSelect());
         document.getElementById('btn-about')?.addEventListener('click', () => this.showScreen('about-screen'));
+        document.getElementById('btn-ranking')?.addEventListener('click', () => this.showRanking());
+        document.getElementById('btn-edit-name')?.addEventListener('click', async () => {
+            const name = await this.promptForName({ title: '修改你的名字', defaultValue: this.getCurrentPlayer() });
+            if (name) this.setCurrentPlayer(name);
+        });
 
         // 返回按钮
         document.getElementById('btn-back-from-levels')?.addEventListener('click', () => this.showScreen('start-screen'));
         document.getElementById('btn-back-from-about')?.addEventListener('click', () => this.showScreen('start-screen'));
+        document.getElementById('btn-back-from-ranking')?.addEventListener('click', () => this.showScreen('start-screen'));
+        document.getElementById('btn-clear-ranking')?.addEventListener('click', () => {
+            if (confirm('确定要清空排行榜吗？此操作不可撤销。')) {
+                this.clearRanking();
+                this.renderRanking();
+            }
+        });
 
         // 游戏控制按钮
         document.getElementById('btn-pause')?.addEventListener('click', () => this.togglePause());
@@ -249,7 +264,7 @@ class Game {
 
             btn.addEventListener('click', () => {
                 if (this.wordManager.isLevelUnlocked(i)) {
-                    this.startGame(i);
+                    this.requestNameThenStart(i);
                 }
             });
 
@@ -272,12 +287,26 @@ class Game {
         if (missedCount > 0) {
             btn.innerHTML = `📚 错词复习<br><span class="special-count">${missedCount} 个待复习</span>`;
             btn.classList.add('has-missed');
-            btn.addEventListener('click', () => this.startGame('missed'));
+            btn.addEventListener('click', () => this.requestNameThenStart('missed'));
         } else {
             btn.innerHTML = `📚 错词复习<br><span class="special-count">暂无错词</span>`;
             btn.disabled = true;
         }
         container.appendChild(btn);
+    }
+
+    /**
+     * 在 startGame 之前确认玩家姓名：没有则弹 modal 强制输入。
+     * 已设置则直接开始游戏（不打扰玩家）。
+     */
+    async requestNameThenStart(level) {
+        let name = this.getCurrentPlayer();
+        if (!name) {
+            name = await this.promptForName({ title: '欢迎！请输入你的名字' });
+            if (!name) return;  // 用户取消
+            this.setCurrentPlayer(name);
+        }
+        this.startGame(level);
     }
 
     startGame(level) {
@@ -303,6 +332,7 @@ class Game {
         this.combo = 0;
         this.maxCombo = 0;
         this.errorCount = 0;
+        this.wrongClickStreak = 0;  // 累进扣分计数器
         this.isPaused = false;
         this.isRunning = true;
         this.activeWords = [];
@@ -613,6 +643,8 @@ class Game {
         if (this.combo > this.maxCombo) {
             this.maxCombo = this.combo;
         }
+        // 答对 → 重置连续点错计数（累进扣分重新从 -10 起算）
+        this.wrongClickStreak = 0;
 
         // 计算分数（连击递增：10, 20, 30, ...）
         const score = this.combo * 10;
@@ -699,7 +731,11 @@ class Game {
     handleWrongMatch(element) {
         this.combo = 0;
         this.errorCount++;
-        this.score = Math.max(0, this.score - 5);
+        // 累进扣分：连续点错 → 第 1 次 -10，第 2 次 -20，第 3 次 -30 ...
+        // 答对一次后清零（handleCorrectMatch 中重置 wrongClickStreak）
+        this.wrongClickStreak = (this.wrongClickStreak || 0) + 1;
+        const penalty = 10 * this.wrongClickStreak;
+        this.score = Math.max(0, this.score - penalty);
 
         // 标记 .wrong 让 CSS 触发爆炸消失动画
         if (element) element.classList.add('wrong');
@@ -715,6 +751,17 @@ class Game {
         }
         this.soundManager.play('miss');
         this.animationPlayer.createShakeEffect(element);
+
+        // 弹出扣分提示（红色 -N）
+        if (element) {
+            const rect = element.getBoundingClientRect();
+            this.animationPlayer.createScorePopup(
+                rect.left + rect.width / 2,
+                rect.top + rect.height / 2,
+                `-${penalty}`,
+                'negative'
+            );
+        }
 
         // 手柄振动反馈：错误点击 → 与错过同强度
         if (this.gamepadController) {
@@ -744,6 +791,8 @@ class Game {
         this.combo = 0;
         this.errorCount++;
         this.score = Math.max(0, this.score - 5);
+        // 单词落地也重置连续点错计数（不同错误类型不应叠加）
+        this.wrongClickStreak = 0;
 
         // 手柄振动反馈：单词错过 → 短促轻震
         if (this.gamepadController) {
@@ -804,6 +853,14 @@ class Game {
         // 保存进度
         this.wordManager.completeLevel(this.currentLevel, this.score);
 
+        // 保存排行榜记录
+        this.saveRankingEntry({
+            name:  this.getCurrentPlayer() || '匿名',
+            score: this.totalScore,
+            level: this.currentLevel,
+            date:  new Date().toISOString()
+        });
+
         // 显示过关界面
         document.getElementById('final-score').textContent = `${this.totalScore} (本关 ${this.score})`;
         document.getElementById('max-combo').textContent = this.maxCombo;
@@ -822,6 +879,14 @@ class Game {
         this.totalScore += this.score;
         document.getElementById('gameover-score').textContent = this.totalScore;
         document.getElementById('gameover-level').textContent = this.currentLevel;
+
+        // 保存排行榜记录（即使游戏失败也记录）
+        this.saveRankingEntry({
+            name:  this.getCurrentPlayer() || '匿名',
+            score: this.totalScore,
+            level: this.currentLevel,
+            date:  new Date().toISOString()
+        });
 
         this.soundManager.play('gameOver');
         this.showScreen('gameover-screen');
@@ -1044,7 +1109,10 @@ class Game {
         let selector = '';
         switch (this.currentScreen) {
             case 'start-screen':
-                selector = '#start-screen .setting-stepper, #start-screen .btn-primary, #start-screen .btn-secondary';
+                selector = '#start-screen .setting-stepper, #start-screen .btn-primary, #start-screen .btn-secondary, #start-screen .btn-edit-name';
+                break;
+            case 'ranking-screen':
+                selector = '#ranking-screen .btn-back, #ranking-screen .btn-clear-ranking';
                 break;
             case 'level-select-screen':
                 selector = '#level-select-screen .level-btn:not(.locked), #level-select-screen .level-special-btn, #level-select-screen .btn-back';
@@ -1107,6 +1175,190 @@ class Game {
         if (display && select && select.options[select.selectedIndex]) {
             display.textContent = select.options[select.selectedIndex].textContent;
         }
+    }
+
+    // ====== 玩家姓名 & 排行榜 ======
+
+    /** localStorage 键名 */
+    static STORAGE_KEYS = {
+        ranking: 'wordGameRanking',
+        player:  'wordGameCurrentPlayer'
+    };
+
+    /** 排行榜容量 */
+    static RANKING_MAX = 10;
+
+    /** 读取排行榜（按 score 降序） */
+    loadRanking() {
+        try {
+            const raw = localStorage.getItem(Game.STORAGE_KEYS.ranking);
+            const list = raw ? JSON.parse(raw) : [];
+            return Array.isArray(list) ? list : [];
+        } catch (e) {
+            return [];
+        }
+    }
+
+    /** 保存一条排行榜记录，并裁剪到 RANKING_MAX */
+    saveRankingEntry(entry) {
+        const list = this.loadRanking();
+        list.push({
+            name:   entry.name   || '匿名',
+            score:  Number(entry.score)  || 0,
+            level:  Number(entry.level)  || 1,
+            date:   entry.date   || new Date().toISOString()
+        });
+        list.sort((a, b) => b.score - a.score);
+        const top = list.slice(0, Game.RANKING_MAX);
+        try {
+            localStorage.setItem(Game.STORAGE_KEYS.ranking, JSON.stringify(top));
+        } catch (e) {
+            console.warn('localStorage save failed:', e);
+        }
+        return top;
+    }
+
+    /** 清空排行榜 */
+    clearRanking() {
+        try {
+            localStorage.removeItem(Game.STORAGE_KEYS.ranking);
+        } catch (e) {}
+    }
+
+    /** 读取当前玩家名（可能为空字符串） */
+    getCurrentPlayer() {
+        try {
+            return localStorage.getItem(Game.STORAGE_KEYS.player) || '';
+        } catch (e) {
+            return '';
+        }
+    }
+
+    /** 设置当前玩家名 */
+    setCurrentPlayer(name) {
+        const trimmed = String(name || '').trim().slice(0, 20);
+        try {
+            if (trimmed) {
+                localStorage.setItem(Game.STORAGE_KEYS.player, trimmed);
+            } else {
+                localStorage.removeItem(Game.STORAGE_KEYS.player);
+            }
+        } catch (e) {}
+        this.updateCurrentPlayerDisplay();
+    }
+
+    /** 更新开始界面"当前玩家"显示 */
+    updateCurrentPlayerDisplay() {
+        const el = document.getElementById('current-player-name');
+        if (!el) return;
+        const name = this.getCurrentPlayer();
+        el.textContent = name || '未设置';
+    }
+
+    /**
+     * 弹出姓名输入 modal，返回 Promise<string>。
+     * 用户输入名字并确定后 resolve(name)；点取消或关闭 resolve(null)。
+     */
+    promptForName({ title = '请输入你的名字', defaultValue = '', requireNonEmpty = true } = {}) {
+        return new Promise((resolve) => {
+            const modal   = document.getElementById('name-input-modal');
+            const titleEl = document.getElementById('name-modal-title');
+            const input   = document.getElementById('player-name-input');
+            const confirm = document.getElementById('btn-confirm-name');
+            const cancel  = document.getElementById('btn-cancel-name');
+
+            if (!modal || !input || !confirm || !cancel) {
+                resolve(null);
+                return;
+            }
+
+            titleEl.textContent = title;
+            input.value = defaultValue || this.getCurrentPlayer() || '';
+            input.classList.remove('input-error');
+            modal.classList.add('active');
+            // 等下一帧让 input 拿到焦点（动画结束）
+            setTimeout(() => { input.focus(); input.select(); }, 50);
+
+            const cleanup = () => {
+                modal.classList.remove('active');
+                confirm.removeEventListener('click', onConfirm);
+                cancel.removeEventListener('click', onCancel);
+                input.removeEventListener('keydown', onKey);
+                modal.removeEventListener('click', onBackdrop);
+            };
+
+            const onConfirm = () => {
+                const name = input.value.trim().slice(0, 20);
+                if (requireNonEmpty && !name) {
+                    input.classList.add('input-error');
+                    setTimeout(() => input.classList.remove('input-error'), 400);
+                    return;
+                }
+                cleanup();
+                resolve(name || null);
+            };
+            const onCancel = () => { cleanup(); resolve(null); };
+            const onKey = (e) => {
+                if (e.key === 'Enter') { e.preventDefault(); onConfirm(); }
+                if (e.key === 'Escape') { e.preventDefault(); onCancel(); }
+            };
+            const onBackdrop = (e) => { if (e.target === modal) onCancel(); };
+
+            confirm.addEventListener('click', onConfirm);
+            cancel.addEventListener('click', onCancel);
+            input.addEventListener('keydown', onKey);
+            modal.addEventListener('click', onBackdrop);
+        });
+    }
+
+    /** 渲染排行榜屏幕 */
+    renderRanking() {
+        const list = this.loadRanking();
+        const container = document.getElementById('ranking-list');
+        if (!container) return;
+        container.innerHTML = '';
+
+        if (list.length === 0) {
+            const empty = document.createElement('div');
+            empty.className = 'ranking-entry empty';
+            empty.textContent = '暂无记录，去玩一局吧！';
+            container.appendChild(empty);
+            return;
+        }
+
+        list.forEach((entry, idx) => {
+            const row = document.createElement('div');
+            row.className = 'ranking-entry';
+            const rankCls = idx < 3 ? `rank-${idx + 1}` : 'rank-other';
+            // 格式化日期 YYYY-MM-DD
+            let dateStr = '';
+            try {
+                const d = new Date(entry.date);
+                if (!isNaN(d.getTime())) {
+                    dateStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+                }
+            } catch (e) {}
+            row.innerHTML = `
+                <span class="rank ${rankCls}">${idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : idx + 1}</span>
+                <span class="player-name">${this._escapeHtml(entry.name)}</span>
+                <span class="player-score">${entry.score}</span>
+                <span class="player-date">${dateStr}</span>
+            `;
+            container.appendChild(row);
+        });
+    }
+
+    /** 显示排行榜屏幕 */
+    showRanking() {
+        this.renderRanking();
+        this.showScreen('ranking-screen');
+    }
+
+    /** HTML 转义（防 XSS，玩家名可能含特殊字符） */
+    _escapeHtml(str) {
+        return String(str || '').replace(/[&<>"']/g, c => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        })[c]);
     }
 
     toggleSound() {

@@ -217,6 +217,240 @@ button:active {
                 var(--shadow-medium);
 }
 
+/* ===== 当前玩家显示 ===== */
+.current-player-display {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 10px 20px;
+    background: rgba(255, 255, 255, 0.7);
+    border-radius: var(--border-radius);
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text-dark);
+    margin-bottom: 5px;
+}
+
+.current-player-label {
+    color: var(--primary-color);
+}
+
+#current-player-name {
+    color: var(--accent-color);
+    font-size: 1.3rem;
+}
+
+.btn-edit-name {
+    background: transparent;
+    border: none;
+    font-size: 1rem;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 8px;
+    color: var(--text-dark);
+    outline: none;
+    transition: var(--transition-smooth);
+}
+
+.btn-edit-name:hover {
+    background: var(--secondary-color);
+    transform: scale(1.1);
+}
+
+/* ===== 排行榜 ===== */
+.ranking-header {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 30px;
+    max-width: 700px;
+}
+
+.ranking-header h2 {
+    font-size: 2rem;
+    color: var(--primary-color);
+}
+
+.ranking-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+    max-width: 700px;
+    width: 100%;
+}
+
+.ranking-list {
+    width: 100%;
+    background: rgba(255, 255, 255, 0.95);
+    border-radius: var(--border-radius);
+    padding: 15px;
+    box-shadow: var(--shadow-medium);
+    min-height: 200px;
+}
+
+.ranking-entry {
+    display: grid;
+    grid-template-columns: 50px 1fr 100px 100px;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 15px;
+    border-bottom: 1px dashed #ddd;
+    font-size: 1.05rem;
+}
+
+.ranking-entry:last-child {
+    border-bottom: none;
+}
+
+.ranking-entry .rank {
+    font-size: 1.4rem;
+    font-weight: 700;
+    text-align: center;
+}
+
+.ranking-entry .rank-1 { color: #FFD700; }
+.ranking-entry .rank-2 { color: #C0C0C0; }
+.ranking-entry .rank-3 { color: #CD7F32; }
+.ranking-entry .rank-other { color: var(--text-dark); }
+
+.ranking-entry .player-name {
+    font-weight: 600;
+    color: var(--text-dark);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.ranking-entry .player-score {
+    font-weight: 700;
+    color: var(--primary-color);
+    text-align: right;
+}
+
+.ranking-entry .player-date {
+    font-size: 0.85rem;
+    color: #888;
+    text-align: right;
+}
+
+.ranking-entry.empty {
+    grid-template-columns: 1fr;
+    text-align: center;
+    color: #888;
+    padding: 30px;
+    font-style: italic;
+}
+
+.btn-clear-ranking {
+    font-size: 0.95rem;
+    padding: 10px 25px;
+    background: rgba(231, 76, 60, 0.15);
+    color: var(--error-color);
+}
+
+.btn-clear-ranking:hover {
+    background: var(--error-color);
+    color: white;
+}
+
+/* ===== 姓名输入弹窗 ===== */
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(8px);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 200;
+}
+
+.modal.active {
+    display: flex;
+    animation: modalFadeIn 0.2s ease-out;
+}
+
+@keyframes modalFadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.modal-content {
+    background: white;
+    padding: 40px 35px;
+    border-radius: var(--border-radius-lg);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+    text-align: center;
+    min-width: 320px;
+    max-width: 420px;
+    animation: modalPop 0.25s ease-out;
+}
+
+@keyframes modalPop {
+    from { transform: scale(0.85); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
+}
+
+.modal-content h3 {
+    font-size: 1.6rem;
+    color: var(--text-dark);
+    margin-bottom: 8px;
+}
+
+.modal-hint {
+    font-size: 0.95rem;
+    color: #888;
+    margin-bottom: 20px;
+}
+
+#player-name-input {
+    width: 100%;
+    padding: 12px 18px;
+    font-size: 1.2rem;
+    font-family: inherit;
+    border: 3px solid var(--secondary-color);
+    border-radius: var(--border-radius);
+    outline: none;
+    text-align: center;
+    margin-bottom: 20px;
+    transition: var(--transition-smooth);
+}
+
+#player-name-input:focus {
+    border-color: var(--accent-color);
+    box-shadow: 0 0 0 3px rgba(78, 205, 196, 0.3);
+}
+
+#player-name-input.input-error {
+    border-color: var(--error-color);
+    animation: inputShake 0.4s ease-out;
+}
+
+@keyframes inputShake {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-8px); }
+    50% { transform: translateX(8px); }
+    75% { transform: translateX(-4px); }
+}
+
+.modal-buttons {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+}
+
+.modal-buttons button {
+    padding: 12px 30px;
+    font-size: 1.1rem;
+    min-width: 110px;
+}
+
 /* ===== Buttons ===== */
 .btn-primary, .btn-secondary, .btn-icon {
     padding: 18px 50px;
