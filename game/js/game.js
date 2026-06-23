@@ -24,11 +24,18 @@ class Game {
         this.wordSpeed = 1;
         this.targetMeaning = null;
 
+        // 手柄焦点状态
+        this.focusedIndex = 0;
+        this.focusedButtonIndex = 0;
+        this.focusableButtons = [];
+        this.stickFocusTimer = 0;  // 摇杆移动冷却（防止过快切换）
+
         // 初始化各模块
         this.soundManager = null;
         this.animationPlayer = null;
         this.wordManager = null;
         this.collisionDetector = null;
+        this.gamepadController = null;
 
         // DOM元素
         this.screens = {};
@@ -50,6 +57,11 @@ class Game {
         // 初始化音效和动画播放器
         await this.soundManager.init();
         this.animationPlayer.init('animation-layer');
+
+        // 初始化背景动画
+        if (window.backgroundAnimator) {
+            window.backgroundAnimator.init();
+        }
 
         // 加载词库
         await this.wordManager.loadWords();
@@ -119,6 +131,47 @@ class Game {
         // 初始化碰撞检测
         this.collisionDetector.init('game-area');
         this.collisionDetector.bindEvents((result) => this.handleWordClick(result));
+
+        // 初始化手柄控制器
+        if (window.gamepadController) {
+            this.gamepadController = window.gamepadController;
+            this.gamepadController.init();
+            // 非游戏进行中状态都轮询手柄（菜单/暂停/过关/结束），
+            // 暂停/过关/结束时 gameLoop 已被 cancelAnimationFrame 停止，必须靠这里
+            this._menuPadInterval = setInterval(() => {
+                if (this.currentScreen !== 'game-screen' || this.isPaused || !this.isRunning) {
+                    this.pollGamepad(0);
+                }
+            }, 80);
+        }
+
+        // 初始化设置 stepper：同步显示 + 绑定点击 / 键盘事件
+        ['words-per-level', 'lives-count', 'speed-setting'].forEach(id => {
+            this.syncStepperDisplay(id);
+            const stepper = document.getElementById('stepper-' + id);
+            if (!stepper) return;
+            stepper.querySelector('.stepper-prev')?.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.stepSelect(id, -1);
+            });
+            stepper.querySelector('.stepper-next')?.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.stepSelect(id, 1);
+            });
+            // 点击 value 区域 = 前进（步进感）
+            stepper.querySelector('.stepper-value')?.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.stepSelect(id, 1);
+            });
+            // 键盘支持：方向键也能切换
+            stepper.addEventListener('keydown', (e) => {
+                if (e.key === 'ArrowLeft')  { e.preventDefault(); this.stepSelect(id, -1); }
+                if (e.key === 'ArrowRight') { e.preventDefault(); this.stepSelect(id, 1); }
+            });
+        });
+
+        // 初始化手柄焦点状态
+        this.updateFocusableButtons();
     }
 
     showScreen(screenId) {
@@ -138,6 +191,38 @@ class Game {
         if (screenId === 'level-select-screen') {
             this.updateLevelGrid();
         }
+
+        // 切换屏幕时刷新可聚焦按钮列表
+        setTimeout(() => this.updateFocusableButtons(), 0);
+    }
+
+    // 在屏幕中央显示一条临时消息（毫秒后自动消失）
+    showMessage(text, duration = 1200) {
+        const layer = document.getElementById('animation-layer');
+        if (!layer) return;
+        const msg = document.createElement('div');
+        msg.className = 'game-message';
+        msg.textContent = text;
+        msg.style.cssText = `
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) scale(0.5);
+            padding: 16px 32px;
+            background: rgba(0, 0, 0, 0.75);
+            color: #FFD93D;
+            font-size: 1.8rem;
+            font-weight: 700;
+            border-radius: 16px;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+            z-index: 200;
+            opacity: 0;
+            pointer-events: none;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+            animation: gameMessageAnim 1.2s ease-out forwards;
+        `;
+        layer.appendChild(msg);
+        setTimeout(() => msg.remove(), duration + 100);
     }
 
     updateLevelGrid() {
@@ -170,10 +255,34 @@ class Game {
 
             grid.appendChild(btn);
         }
+
+        // 渲染"错词复习"特殊关卡
+        this.renderMissedLevelButton();
+    }
+
+    renderMissedLevelButton() {
+        const container = document.getElementById('level-special-row');
+        if (!container) return;
+
+        const missedCount = this.wordManager.getMissedWordsCount();
+        container.innerHTML = '';
+
+        const btn = document.createElement('button');
+        btn.className = 'level-special-btn';
+        if (missedCount > 0) {
+            btn.innerHTML = `📚 错词复习<br><span class="special-count">${missedCount} 个待复习</span>`;
+            btn.classList.add('has-missed');
+            btn.addEventListener('click', () => this.startGame('missed'));
+        } else {
+            btn.innerHTML = `📚 错词复习<br><span class="special-count">暂无错词</span>`;
+            btn.disabled = true;
+        }
+        container.appendChild(btn);
     }
 
     startGame(level) {
         this.currentLevel = level;
+        this.isMissedLevel = (level === 'missed');
 
         // 读取用户设置
         const countSelect = document.getElementById('words-per-level');
@@ -203,9 +312,16 @@ class Game {
         }
         this.wordSpawnTimer = 0;
 
-        // 根据关卡设置难度参数 - 最多6个活跃单词
-        this.maxActiveWords = 6;
-        this.wordSpeed = (1 + (level / 50) * 0.5) * this.speedMultiplier; // 基础速度 × 用户速度倍率
+        // 根据关卡设置难度参数
+        // 错题关卡：需要更多干扰词来强化记忆，普通关卡按 level 递增
+        if (this.isMissedLevel) {
+            this.maxActiveWords = 12;
+        } else {
+            this.maxActiveWords = 6;
+        }
+        // 错词关卡用中等速度，普通关卡按 level 递增
+        const baseLevel = this.isMissedLevel ? 20 : (typeof level === 'number' ? level : 1);
+        this.wordSpeed = (1 + (baseLevel / 50) * 0.5) * this.speedMultiplier;
 
         // 更新UI
         this.updateUI();
@@ -216,6 +332,11 @@ class Game {
 
         // 预生成多个干扰词填充屏幕
         this.preSpawnWords();
+
+        // 重置手柄焦点
+        this.focusedIndex = 0;
+        this.focusedButtonIndex = 0;
+        setTimeout(() => this.applyWordFocus(), 100);
 
         // 启动游戏循环
         this.lastFrameTime = performance.now();
@@ -232,6 +353,8 @@ class Game {
                 }
             }, i * 200); // 间隔200ms逐个生成
         }
+        // 单词预生成完成后，让手柄焦点落到第一个单词
+        setTimeout(() => this.applyWordFocus(), this.maxActiveWords * 200 + 50);
     }
 
     // 随机生成一个单词（目标或干扰）
@@ -240,7 +363,8 @@ class Game {
         const isTargetOnScreen = this.targetMeaning &&
             this.activeWords.some(w => w.data.word === this.targetMeaning.word &&
                 !w.element.classList.contains('hit') &&
-                !w.element.classList.contains('miss'));
+                !w.element.classList.contains('miss') &&
+                !w.element.classList.contains('wrong'));
 
         if (this.targetMeaning && !isTargetOnScreen) {
             // 目标不在屏幕上，高概率立即生成（80%）
@@ -289,7 +413,8 @@ class Game {
         const existingTarget = this.activeWords.find(
             w => w.data.word === wordData.word &&
             !w.element.classList.contains('hit') &&
-            !w.element.classList.contains('miss')
+            !w.element.classList.contains('miss') &&
+            !w.element.classList.contains('wrong')
         );
         if (existingTarget) return;
 
@@ -332,7 +457,13 @@ class Game {
 
         // 保持屏幕上有足够的单词
         this.wordSpawnTimer += deltaTime;
-        const spawnInterval = Math.max(1.0 - (this.currentLevel / 100), 0.5);
+        // 错题关卡用较快刷新频率（单词掉落快，需要更频繁补位）
+        let spawnInterval;
+        if (this.isMissedLevel) {
+            spawnInterval = 0.8;  // 错题关卡：每 0.8s 补一个
+        } else {
+            spawnInterval = Math.max(1.0 - (this.currentLevel / 100), 0.5);
+        }
         if (this.wordSpawnTimer >= spawnInterval && this.activeWords.length < this.maxActiveWords) {
             this.spawnRandomWord();
             this.wordSpawnTimer = 0;
@@ -340,6 +471,9 @@ class Game {
 
         // 检测单词是否落地
         this.checkLandedWords();
+
+        // 轮询手柄输入
+        this.pollGamepad(deltaTime);
 
         // 继续循环
         this.gameLoopId = requestAnimationFrame((time) => this.gameLoop(time));
@@ -389,7 +523,8 @@ class Game {
         const existingTarget = this.activeWords.find(
             w => w.data.word === this.targetMeaning.word &&
             !w.element.classList.contains('hit') &&
-            !w.element.classList.contains('miss')
+            !w.element.classList.contains('miss') &&
+            !w.element.classList.contains('wrong')
         );
 
         // 如果目标单词不在屏幕上，先生成目标单词
@@ -404,7 +539,7 @@ class Game {
 
     updateWords(deltaTime) {
         this.activeWords.forEach((word, index) => {
-            if (word.element.classList.contains('hit') || word.element.classList.contains('miss')) {
+            if (word.element.classList.contains('hit') || word.element.classList.contains('miss') || word.element.classList.contains('wrong')) {
                 return;
             }
 
@@ -417,8 +552,16 @@ class Game {
         this.activeWords = this.activeWords.filter(w =>
             w.element.parentNode &&
             !w.element.classList.contains('hit') &&
-            !w.element.classList.contains('miss')
+            !w.element.classList.contains('miss') &&
+            !w.element.classList.contains('wrong')
         );
+
+        // 维护手柄焦点：如果当前聚焦的单词已消失，重置到 0
+        const alive = this.aliveWordBubbles();
+        if (this.focusedIndex >= alive.length) {
+            this.focusedIndex = 0;
+            this.applyWordFocus();
+        }
     }
 
     checkLandedWords() {
@@ -426,7 +569,7 @@ class Game {
         const bottomLimit = areaHeight - 50;
 
         this.activeWords.forEach((word) => {
-            if (word.y >= bottomLimit && !word.element.classList.contains('miss')) {
+            if (word.y >= bottomLimit && !word.element.classList.contains('miss') && !word.element.classList.contains('wrong')) {
                 word.element.classList.add('miss');
                 this.soundManager.play('land');
 
@@ -451,7 +594,7 @@ class Game {
         const { word, meaning, element, x, y } = result;
 
         // 防止同一元素被重复处理
-        if (element.classList.contains('hit') || element.classList.contains('miss')) {
+        if (element.classList.contains('hit') || element.classList.contains('miss') || element.classList.contains('wrong')) {
             return;
         }
 
@@ -488,8 +631,27 @@ class Game {
             this.animationPlayer.createComboAnimation(this.combo);
         }
 
-        // 标记单词已使用
-        this.wordManager.markWordAsUsed(this.targetMeaning.word);
+        // 错词关卡中，累计 3 次正确后才从错词本中移除
+        if (this.isMissedLevel) {
+            const result = this.wordManager.markMissedWordProgress(this.targetMeaning.word, 3);
+            if (result.mastered) {
+                // 达到 3 次，播放庆祝音效与烟花
+                this.soundManager.play('firework');
+                this.animationPlayer.createFireworks?.(x, y);
+                // 手柄振动反馈：错词掌握 → 双脉冲强震
+                if (this.gamepadController) {
+                    this.gamepadController.vibrate('celebrate');
+                }
+                this.showMessage('🎉 已掌握！', 1500);
+            } else {
+                // 显示进度 (1/3, 2/3)
+                this.showMessage(`✦ 进度 ${result.hits}/${result.required}`, 800);
+            }
+            // 错题关卡中不调用 markWordAsUsed（错词本中的词每个要重复 3 次）
+        } else {
+            // 普通关卡：标记单词已使用
+            this.wordManager.markWordAsUsed(this.targetMeaning.word);
+        }
 
         // 检查是否过关
         if (this.wordManager.isLevelComplete(this.currentLevel)) {
@@ -537,10 +699,34 @@ class Game {
         this.errorCount++;
         this.score = Math.max(0, this.score - 5);
 
+        // 标记 .wrong 让 CSS 触发爆炸消失动画
+        if (element) element.classList.add('wrong');
+
+        // 在单词位置触发爆炸粒子效果
+        if (element) {
+            const rect = element.getBoundingClientRect();
+            this.animationPlayer.createHitEffect(
+                rect.left + rect.width / 2,
+                rect.top + rect.height / 2,
+                'wrong'
+            );
+        }
         this.soundManager.play('miss');
         this.animationPlayer.createShakeEffect(element);
 
+        // 手柄振动反馈：错误点击 → 与错过同强度
+        if (this.gamepadController) {
+            this.gamepadController.vibrate('miss');
+        }
+
         this.updateUI();
+
+        // 动画结束后从 activeWords 中移除并删除 DOM
+        if (element) {
+            setTimeout(() => {
+                if (element.parentNode) element.parentNode.removeChild(element);
+            }, 500);
+        }
 
         if (this.maxErrors < 999 && this.errorCount >= this.maxErrors) {
             this.handleGameOver();
@@ -551,6 +737,39 @@ class Game {
         this.combo = 0;
         this.errorCount++;
         this.score = Math.max(0, this.score - 5);
+
+        // 手柄振动反馈：单词错过 → 短促轻震
+        if (this.gamepadController) {
+            this.gamepadController.vibrate('miss');
+        }
+
+        // 仅当目标词落地时，计入"目标词错过次数"
+        let shouldSkipTarget = false;
+        if (word && word.data && this.targetMeaning &&
+            word.data.word === this.targetMeaning.word) {
+            shouldSkipTarget = this.wordManager.recordTargetMiss(word.data.word);
+
+            if (shouldSkipTarget) {
+                // 标记为错词，加入错词本
+                this.wordManager.saveMissedWord(word.data);
+                // 播放特殊的"跳过"音效
+                this.soundManager.play('skip');
+                this.animationPlayer.createScorePopup(
+                    word.element.getBoundingClientRect().left + 80,
+                    word.element.getBoundingClientRect().top,
+                    '跳过！',
+                    'negative'
+                );
+                // 切换到下一个目标
+                setTimeout(() => {
+                    this.setNextTarget();
+                    this.removeExcessRandomWords();
+                    this.accelerateDrops();
+                    this.forceSpawnTarget();
+                    this.updateUI();
+                }, 600);
+            }
+        }
 
         if (this.maxErrors < 999 && this.errorCount >= this.maxErrors) {
             this.handleGameOver();
@@ -631,6 +850,236 @@ class Game {
         this.showScreen('start-screen');
     }
 
+    // ====== 手柄支持 ======
+
+    pollGamepad(deltaTime) {
+        if (!this.gamepadController) return;
+        this.gamepadController.update();
+
+        // 全局通用：A 键、Start/X 键、Select 键 在所有界面都生效
+        if (this.gamepadController.consumeConfirm()) {
+            this.handleGamepadConfirm();
+        }
+        if (this.gamepadController.consumePause()) {
+            if (this.currentScreen === 'game-screen') this.togglePause();
+        }
+        if (this.gamepadController.consumeMenu()) {
+            if (this.currentScreen === 'game-screen') this.quitGame();
+            else if (this.currentScreen === 'level-select-screen' || this.currentScreen === 'about-screen') this.showScreen('start-screen');
+        }
+        if (this.gamepadController.consumeBack()) {
+            // B 键：游戏内退出，菜单中返回
+            if (this.currentScreen === 'game-screen') this.quitGame();
+            else if (this.currentScreen === 'level-select-screen' || this.currentScreen === 'about-screen') this.showScreen('start-screen');
+            else if (this.currentScreen === 'pause-screen') this.togglePause();  // 退出暂停
+        }
+
+        // 游戏中：单词焦点导航
+        if (this.currentScreen === 'game-screen' && this.isRunning && !this.isPaused) {
+            let dir = 0;
+            if (this.gamepadController.consumeDpadLeft()) dir = -1;
+            if (this.gamepadController.consumeDpadRight()) dir = 1;
+            if (dir !== 0) {
+                this.cycleWordFocus(dir);
+                this.stickFocusTimer = 0.3;  // 摇杆移动冷却 300ms
+            } else {
+                // 左摇杆连续移动（snap 到最近单词）
+                this.stickFocusTimer = Math.max(0, this.stickFocusTimer - deltaTime);
+                if (this.stickFocusTimer === 0) {
+                    const stickX = this.gamepadController.getLeftStickX();
+                    if (Math.abs(stickX) > 0.3) {
+                        this.snapFocusByStick(stickX);
+                        this.stickFocusTimer = 0.18;
+                    }
+                }
+            }
+        } else if (this.focusableButtons.length > 0) {
+            // 菜单界面：按钮焦点导航
+            const focused = this.focusableButtons[this.focusedButtonIndex];
+            const focusedIsStepper = this.isStepper(focused);
+
+            // stepper 焦点：D-pad Left/Right 改值；Up/Down 移动焦点
+            let dir = 0;
+            if (focusedIsStepper) {
+                if (this.gamepadController.consumeDpadLeft())  this.stepSelect(focused.dataset.target, -1);
+                if (this.gamepadController.consumeDpadRight()) this.stepSelect(focused.dataset.target, 1);
+                if (this.gamepadController.consumeDpadUp())    dir = -this.currentRowSize();
+                if (this.gamepadController.consumeDpadDown())  dir = this.currentRowSize();
+            } else {
+                if (this.gamepadController.consumeDpadLeft())  dir = -1;
+                if (this.gamepadController.consumeDpadRight()) dir = 1;
+                if (this.gamepadController.consumeDpadUp())    dir = -this.currentRowSize();
+                if (this.gamepadController.consumeDpadDown())  dir = this.currentRowSize();
+            }
+            if (dir !== 0) this.cycleButtonFocus(dir);
+        }
+    }
+
+    currentRowSize() {
+        // 关卡选择界面：10 列布局
+        if (this.currentScreen === 'level-select-screen') return 10;
+        // 其余界面：竖向排列，按 1 个切换
+        return 1;
+    }
+
+    handleGamepadConfirm() {
+        if (this.currentScreen === 'game-screen' && this.isRunning && !this.isPaused) {
+            this.selectFocusedWord();
+        } else {
+            // 菜单：stepper → 前进一档；按钮 → 点击
+            const focused = this.focusableButtons[this.focusedButtonIndex];
+            if (!focused) return;
+            if (this.isStepper(focused)) {
+                this.stepSelect(focused.dataset.target, 1);
+            } else {
+                focused.click();
+            }
+        }
+    }
+
+    /** 游戏中：A 键选择当前聚焦单词 */
+    selectFocusedWord() {
+        const alive = this.aliveWordBubbles();
+        if (alive.length === 0) return;
+        // 修正 focusedIndex 到有效范围
+        if (this.focusedIndex >= alive.length) this.focusedIndex = 0;
+        const target = alive[this.focusedIndex];
+        if (!target) return;
+        const rect = target.element.getBoundingClientRect();
+        const result = {
+            word: target.data.word,
+            meaning: target.data.meaning,
+            difficulty: target.data.difficulty,
+            element: target.element,
+            x: rect.left + rect.width / 2,
+            y: rect.top + rect.height / 2
+        };
+        this.handleWordClick(result);
+    }
+
+    /** D-pad 左右：在 alive 单词列表中循环切换焦点 */
+    cycleWordFocus(direction) {
+        const alive = this.aliveWordBubbles();
+        if (alive.length === 0) {
+            this.focusedIndex = 0;
+            return;
+        }
+        this.focusedIndex = (this.focusedIndex + direction + alive.length) % alive.length;
+        this.applyWordFocus();
+    }
+
+    /** 摇杆：snap 到最接近当前 X 方向 + 摇杆方向的 alive 单词 */
+    snapFocusByStick(stickX) {
+        const alive = this.aliveWordBubbles();
+        if (alive.length === 0) return;
+        const current = alive[this.focusedIndex] || alive[0];
+        const currentRect = current.element.getBoundingClientRect();
+        const currentX = currentRect.left + currentRect.width / 2;
+        const areaWidth = this.elements.wordArea.offsetWidth || window.innerWidth;
+        const targetX = currentX + stickX * areaWidth * 0.5;
+
+        let best = 0;
+        let bestDist = Infinity;
+        for (let i = 0; i < alive.length; i++) {
+            const r = alive[i].element.getBoundingClientRect();
+            const cx = r.left + r.width / 2;
+            const d = Math.abs(cx - targetX);
+            if (d < bestDist) { bestDist = d; best = i; }
+        }
+        if (best !== this.focusedIndex) {
+            this.focusedIndex = best;
+            this.applyWordFocus();
+        }
+    }
+
+    applyWordFocus() {
+        // 清除所有 .focused，再添加到当前活跃单词
+        this.activeWords.forEach(w => w.element.classList.remove('focused'));
+        const alive = this.aliveWordBubbles();
+        if (alive[this.focusedIndex]) {
+            alive[this.focusedIndex].element.classList.add('focused');
+        }
+    }
+
+    aliveWordBubbles() {
+        return this.activeWords.filter(w =>
+            w.element.parentNode &&
+            !w.element.classList.contains('hit') &&
+            !w.element.classList.contains('miss') &&
+            !w.element.classList.contains('wrong')
+        );
+    }
+
+    /** 收集当前屏幕的可聚焦按钮 */
+    updateFocusableButtons() {
+        let selector = '';
+        switch (this.currentScreen) {
+            case 'start-screen':
+                selector = '#start-screen .setting-stepper, #start-screen .btn-primary, #start-screen .btn-secondary';
+                break;
+            case 'level-select-screen':
+                selector = '#level-select-screen .level-btn:not(.locked), #level-select-screen .level-special-btn, #level-select-screen .btn-back';
+                break;
+            case 'about-screen':
+                selector = '#about-screen .btn-back';
+                break;
+            case 'pause-screen':
+                selector = '#pause-screen .btn-primary, #pause-screen .btn-secondary';
+                break;
+            case 'win-screen':
+                selector = '#win-screen .btn-primary, #win-screen .btn-secondary';
+                break;
+            case 'gameover-screen':
+                selector = '#gameover-screen .btn-primary, #gameover-screen .btn-secondary';
+                break;
+            default:
+                this.focusableButtons = [];
+                this.focusedButtonIndex = 0;
+                return;
+        }
+        const btns = Array.from(document.querySelectorAll(selector))
+            .filter(b => b.offsetParent !== null);  // 只保留可见按钮
+        this.focusableButtons = btns;
+        if (this.focusedButtonIndex >= btns.length) this.focusedButtonIndex = 0;
+        this.applyButtonFocus();
+    }
+
+    applyButtonFocus() {
+        this.focusableButtons.forEach((b, i) => b.classList.toggle('focused', i === this.focusedButtonIndex));
+    }
+
+    cycleButtonFocus(direction) {
+        if (this.focusableButtons.length === 0) return;
+        this.focusedButtonIndex = (this.focusedButtonIndex + direction + this.focusableButtons.length) % this.focusableButtons.length;
+        this.applyButtonFocus();
+    }
+
+    // ====== Setting Stepper（手柄可聚焦设置控件）======
+
+    /** 判断元素是否是设置 stepper */
+    isStepper(el) {
+        return el && el.classList && el.classList.contains('setting-stepper');
+    }
+
+    /** 修改 select 的 selectedIndex（带 wrap-around），并同步显示文本 */
+    stepSelect(selectId, delta) {
+        const select = document.getElementById(selectId);
+        if (!select) return;
+        const n = select.options.length;
+        const idx = (select.selectedIndex + delta + n) % n;
+        select.selectedIndex = idx;
+        this.syncStepperDisplay(selectId);
+    }
+
+    /** 读取 select 当前选中项的文本，写入对应的 .stepper-value 元素 */
+    syncStepperDisplay(selectId) {
+        const display = document.getElementById('display-' + selectId);
+        const select = document.getElementById(selectId);
+        if (display && select && select.options[select.selectedIndex]) {
+            display.textContent = select.options[select.selectedIndex].textContent;
+        }
+    }
+
     toggleSound() {
         const enabled = this.soundManager.toggle();
         const btn = document.getElementById('btn-sound');
@@ -659,7 +1108,11 @@ class Game {
             }
         }
         if (this.elements.currentLevel) {
-            this.elements.currentLevel.textContent = `关卡 ${this.currentLevel}`;
+            if (this.isMissedLevel) {
+                this.elements.currentLevel.textContent = '📚 错词复习';
+            } else {
+                this.elements.currentLevel.textContent = `关卡 ${this.currentLevel}`;
+            }
         }
         if (this.elements.progress) {
             const total = this.wordManager.wordsPerLevel;
@@ -766,6 +1219,8 @@ class Game {
 
 // 创建游戏实例
 const game = new Game();
+// 暴露到 window 方便控制台调试和 E2E 测试
+window.game = game;
 
 // 页面加载完成后初始化游戏
 if (document.readyState === 'loading') {

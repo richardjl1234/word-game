@@ -13,6 +13,9 @@ class WordManager {
         this.usedWords = [];
         this.matchedWords = [];
         this.progressData = {};
+        this.missedWords = [];        // 当前关卡未掌握的目标词
+        this.missCount = {};          // 当前关卡单词落地次数追踪
+        this.MISS_LIMIT = 2;          // 目标词落地 2 次记为错过
         this.loaded = false;
     }
 
@@ -253,7 +256,97 @@ class WordManager {
         } catch (e) {
             console.warn('Failed to load progress:', e);
         }
-        return { completedLevels: [], highScores: {} };
+        return { completedLevels: [], highScores: {}, missedWords: [], missedWordHits: {} };
+    }
+
+    // 错词本相关：保存错词到 localStorage
+    saveMissedWord(wordData) {
+        if (!this.progressData.missedWords) {
+            this.progressData.missedWords = [];
+        }
+        // 避免重复添加相同单词
+        const exists = this.progressData.missedWords.some(
+            m => m.word === wordData.word
+        );
+        if (!exists) {
+            this.progressData.missedWords.push({
+                word: wordData.word,
+                meaning: wordData.meaning,
+                difficulty: wordData.difficulty,
+                missedAt: Date.now()
+            });
+            this.saveProgress();
+        }
+    }
+
+    getMissedWords() {
+        return this.progressData.missedWords || [];
+    }
+
+    removeMissedWord(word) {
+        if (!this.progressData.missedWords) return;
+        this.progressData.missedWords = this.progressData.missedWords.filter(
+            m => m.word !== word
+        );
+        // 同时清除对应的累计次数
+        if (this.progressData.missedWordHits) {
+            delete this.progressData.missedWordHits[word];
+        }
+        this.saveProgress();
+    }
+
+    // 错词关卡：记录一次正确匹配，返回累计次数
+    recordMissedWordHit(word) {
+        if (!this.progressData.missedWordHits) {
+            this.progressData.missedWordHits = {};
+        }
+        if (!this.progressData.missedWordHits[word]) {
+            this.progressData.missedWordHits[word] = 0;
+        }
+        this.progressData.missedWordHits[word]++;
+        this.saveProgress();
+        return this.progressData.missedWordHits[word];
+    }
+
+    // 获取错词当前的累计正确次数
+    getMissedWordHits(word) {
+        if (!this.progressData.missedWordHits) return 0;
+        return this.progressData.missedWordHits[word] || 0;
+    }
+
+    // 错词关卡：累计 3 次正确后才算掌握（不立即删除，由 cleanupMasteredWords 统一清理）
+    // 返回 { mastered: bool, hits: number, required: number }
+    markMissedWordProgress(word, required = 3) {
+        const hits = this.recordMissedWordHit(word);
+        if (hits >= required) {
+            return { mastered: true, hits, required };
+        }
+        return { mastered: false, hits, required };
+    }
+
+    // 清理已掌握 3 次的错词（在关卡开始或结束时调用）
+    cleanupMasteredWords() {
+        if (!this.progressData.missedWordHits) return;
+        const hits = this.progressData.missedWordHits;
+        const masteredWords = Object.keys(hits).filter(w => hits[w] >= 3);
+        if (masteredWords.length > 0) {
+            masteredWords.forEach(w => this.removeMissedWord(w));
+        }
+    }
+
+    getMissedWordsCount() {
+        return (this.progressData.missedWords || []).length;
+    }
+
+    // 记录一次目标词落地，返回是否已超过阈值需要跳过
+    recordTargetMiss(word) {
+        if (!this.missCount[word]) this.missCount[word] = 0;
+        this.missCount[word]++;
+        return this.missCount[word] >= this.MISS_LIMIT;
+    }
+
+    resetMissCount() {
+        this.missCount = {};
     }
 
     saveProgress() {
@@ -265,6 +358,19 @@ class WordManager {
     }
 
     getLevelWords(level) {
+        // 错题关卡：干扰词池 = 错词本中所有 difficulty 范围内的单词
+        if (level === 'missed') {
+            const missed = this.getMissedWords();
+            if (missed.length === 0) return [];
+            const difficulties = missed.map(m => m.difficulty || 5);
+            const minDifficulty = Math.max(1, Math.min(...difficulties) - 3);
+            const maxDifficulty = Math.min(50, Math.max(...difficulties) + 3);
+            const pool = this.wordsData.filter(
+                w => w.difficulty >= minDifficulty && w.difficulty <= maxDifficulty
+            );
+            return pool;
+        }
+
         // 按 difficulty 字段精确匹配关卡
         let range = 0;
         let levelWords = [];
@@ -287,27 +393,35 @@ class WordManager {
     }
 
     getRandomWordExclude(level, excludeWord) {
-        if (!this.currentLevelWords || this.currentLevelWords.length === 0) {
-            this.currentLevelWords = [...this.getLevelWords(level)];
-            this.usedWords = [];
+        // 错题关卡：干扰词从独立的 distractorPool 选取
+        let pool;
+        if (level === 'missed' && this.distractorPool) {
+            pool = this.distractorPool;
+        } else {
+            if (!this.currentLevelWords || this.currentLevelWords.length === 0) {
+                this.currentLevelWords = [...this.getLevelWords(level)];
+            }
+            pool = this.currentLevelWords;
         }
 
         // 过滤掉已使用的单词和需要排除的单词
-        let availableWords = this.currentLevelWords.filter(w => !this.usedWords.includes(w.word));
+        let availableWords = pool.filter(w => !this.usedWords.includes(w.word));
 
         if (excludeWord) {
             availableWords = availableWords.filter(w => w.word !== excludeWord);
         }
 
         if (availableWords.length === 0) {
-            // 重置已使用单词
+            // 重置已使用单词（但保留 excludeWord 排除）
             this.usedWords = [];
             if (excludeWord) {
-                availableWords = this.currentLevelWords.filter(w => w.word !== excludeWord);
+                availableWords = pool.filter(w => w.word !== excludeWord);
             } else {
-                availableWords = [...this.currentLevelWords];
+                availableWords = [...pool];
             }
         }
+
+        if (availableWords.length === 0) return null;
 
         const randomIndex = Math.floor(Math.random() * availableWords.length);
         const word = availableWords[randomIndex];
@@ -319,6 +433,21 @@ class WordManager {
     getCurrentMeaning() {
         if (this.currentLevelWords.length === 0) {
             this.currentLevelWords = [...this.getLevelWords(this.currentLevel)];
+        }
+
+        // 错题关卡：每个错词都要匹配 3 次才算掌握
+        // 排除"已达到 3 次累计正确"的单词，其他都可以再作为目标
+        if (this.currentLevel === 'missed') {
+            const mastered = (this.progressData.missedWordHits || {});
+            let availableWords = this.currentLevelWords.filter(
+                w => (mastered[w.word] || 0) < 3
+            );
+            if (availableWords.length === 0) {
+                // 所有错词都已掌握 3 次
+                return null;
+            }
+            const randomIndex = Math.floor(Math.random() * availableWords.length);
+            return availableWords[randomIndex];
         }
 
         // 只排除已正确匹配的单词，不受干扰词影响
@@ -347,6 +476,13 @@ class WordManager {
     }
 
     isLevelComplete(level) {
+        // 错题关卡：当所有错词本单词都已掌握 3 次时完成
+        if (level === 'missed') {
+            const missed = this.progressData.missedWords || [];
+            if (missed.length === 0) return false;
+            const hits = this.progressData.missedWordHits || {};
+            return missed.every(m => (hits[m.word] || 0) >= 3);
+        }
         return this.matchedWords.length >= this.wordsPerLevel;
     }
 
@@ -354,7 +490,31 @@ class WordManager {
         this.currentLevel = level;
         this.usedWords = [];
         this.matchedWords = [];
-        this.currentLevelWords = [...this.getLevelWords(level)];
+        this.missedWords = [];
+        this.missCount = {};
+        if (level === 'missed') {
+            // 进入错题关卡前，先清理已掌握 3 次的错词
+            this.cleanupMasteredWords();
+            // 错词关卡：目标词池 = 错词本（每个错词要重复 3 次才算掌握）
+            this.currentLevelWords = this.getMissedWords().map(m => ({
+                word: m.word,
+                meaning: m.meaning,
+                difficulty: m.difficulty,
+                letter_count: m.word.length,
+                syllable_count: 1,
+                audio_path: `sounds/${m.word}.mp3`
+            }));
+            // 干扰词池：错词本中所有 difficulty 范围内的单词（独立池，足够大）
+            this.distractorPool = this.getLevelWords('missed');
+        } else {
+            this.currentLevelWords = [...this.getLevelWords(level)];
+            this.distractorPool = null;
+        }
+    }
+
+    // 错词关卡标记：从错词本移除已掌握单词
+    markMissedWordMastered(word) {
+        this.removeMissedWord(word);
     }
 
     getCurrentLevel() {
@@ -398,6 +558,7 @@ class WordManager {
 
 // 全局词库管理器实例
 const wordManager = new WordManager();
+window.wordManager = wordManager;
 
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = wordManager;

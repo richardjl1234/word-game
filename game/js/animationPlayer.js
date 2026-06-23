@@ -57,6 +57,51 @@ class AnimationPlayer {
         }, 800);
     }
 
+    // 烟花庆祝动画
+    createFireworks(centerX, centerY) {
+        const colors = ['#FF4D4D', '#FF9F40', '#FFD93D', '#6BCB77', '#4D96FF', '#9B72CB', '#F472B6'];
+        const burstCount = 5;
+
+        // 多个烟花在不同位置绽放
+        for (let b = 0; b < burstCount; b++) {
+            const offsetX = (Math.random() - 0.5) * 300;
+            const offsetY = (Math.random() - 0.5) * 200 - 50;
+            const burstX = centerX + offsetX;
+            const burstY = centerY + offsetY;
+            const color = colors[Math.floor(Math.random() * colors.length)];
+
+            // 中央爆炸圆
+            const burst = document.createElement('div');
+            burst.className = 'firework-burst';
+            burst.style.left = (burstX - 15) + 'px';
+            burst.style.top = (burstY - 15) + 'px';
+            burst.style.setProperty('--color', color);
+            burst.style.animationDelay = (b * 0.2) + 's';
+            this.container.appendChild(burst);
+            setTimeout(() => burst.remove(), 1500);
+
+            // 16 颗火花向外飞
+            const sparkCount = 16;
+            for (let i = 0; i < sparkCount; i++) {
+                const angle = (Math.PI * 2 * i) / sparkCount;
+                const distance = 60 + Math.random() * 40;
+                const dx = Math.cos(angle) * distance;
+                const dy = Math.sin(angle) * distance;
+
+                const spark = document.createElement('div');
+                spark.className = 'firework-spark';
+                spark.style.left = burstX + 'px';
+                spark.style.top = burstY + 'px';
+                spark.style.setProperty('--color', color);
+                spark.style.setProperty('--dx', dx + 'px');
+                spark.style.setProperty('--dy', dy + 'px');
+                spark.style.animationDelay = (b * 0.2 + 0.1) + 's';
+                this.container.appendChild(spark);
+                setTimeout(() => spark.remove(), 1500);
+            }
+        }
+    }
+
     // 创建单词消除动画
     createWordHitAnimation(wordElement, callback) {
         wordElement.classList.add('hit');

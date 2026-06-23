@@ -83,7 +83,8 @@ button:active {
 
 /* ===== Start Screen ===== */
 #start-screen {
-    background: var(--background-gradient);
+    background: transparent;
+    z-index: 2;
 }
 
 .title-container {
@@ -154,6 +155,68 @@ button:active {
     box-shadow: 0 0 0 3px rgba(78, 205, 196, 0.3);
 }
 
+/* ===== Setting Stepper (手柄可聚焦设置控件) ===== */
+.visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+.setting-stepper {
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 20px;
+    background: white;
+    border: 3px solid var(--secondary-color);
+    border-radius: var(--border-radius);
+    cursor: pointer;
+    user-select: none;
+    transition: var(--transition-smooth);
+    outline: none;
+}
+
+.setting-stepper:hover {
+    border-color: var(--primary-color);
+}
+
+.stepper-arrow {
+    background: none;
+    border: none;
+    font-size: 1.2rem;
+    color: var(--accent-color);
+    cursor: pointer;
+    padding: 4px 8px;
+    line-height: 1;
+    outline: none;
+    transition: var(--transition-smooth);
+}
+
+.stepper-arrow:hover { transform: scale(1.2); }
+.stepper-arrow:active { transform: scale(0.9); }
+
+.stepper-value {
+    font-size: 1.2rem;
+    font-weight: 600;
+    color: var(--text-dark);
+    min-width: 140px;
+    text-align: center;
+}
+
+.setting-stepper.focused {
+    transform: scale(1.08);
+    border-color: var(--accent-color);
+    box-shadow: 0 0 0 4px var(--accent-color),
+                0 0 20px var(--accent-color),
+                var(--shadow-medium);
+}
+
 /* ===== Buttons ===== */
 .btn-primary, .btn-secondary, .btn-icon {
     padding: 18px 50px;
@@ -198,9 +261,54 @@ button:active {
     box-shadow: none;
 }
 
+/* 手柄聚焦：当前选中的按钮 */
+.btn-primary.focused,
+.btn-secondary.focused,
+.btn-icon.focused,
+.btn-back.focused,
+.level-btn.focused:not(.locked),
+.level-special-btn.focused {
+    transform: scale(1.08);
+    box-shadow: 0 0 0 4px var(--accent-color),
+                0 0 20px var(--accent-color),
+                var(--shadow-medium);
+    outline: none;
+}
+
+.level-btn.focused:not(.locked) {
+    transform: scale(1.15) rotate(5deg);
+}
+
+/* 手柄连接指示器 */
+.gamepad-indicator {
+    display: none;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 12px;
+    background: rgba(78, 205, 196, 0.2);
+    border-radius: 12px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--accent-color);
+    margin-right: 10px;
+    white-space: nowrap;
+}
+
+.gamepad-indicator.connected {
+    display: inline-flex;
+    animation: indicatorBlink 0.5s ease-out;
+}
+
+@keyframes indicatorBlink {
+    0%   { transform: scale(0.7); opacity: 0; }
+    50%  { transform: scale(1.1); opacity: 1; }
+    100% { transform: scale(1);   opacity: 1; }
+}
+
 /* ===== Level Select Screen ===== */
 #level-select-screen {
-    background: var(--background-gradient);
+    background: transparent;
+    z-index: 2;
 }
 
 .level-header, .about-header {
@@ -223,6 +331,58 @@ button:active {
     max-width: 900px;
     width: 100%;
     padding: 20px;
+}
+
+.level-special-row {
+    display: flex;
+    justify-content: center;
+    margin-top: 30px;
+    width: 100%;
+    max-width: 900px;
+}
+
+.level-special-btn {
+    padding: 25px 40px;
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: white;
+    background: linear-gradient(135deg, #9B59B6, #BB8FCE);
+    border-radius: var(--border-radius);
+    box-shadow: var(--shadow-medium);
+    cursor: pointer;
+    text-align: center;
+    line-height: 1.4;
+    transition: var(--transition-smooth);
+    border: none;
+    font-family: inherit;
+}
+
+.level-special-btn:hover:not(:disabled) {
+    transform: scale(1.05) rotate(-1deg);
+    box-shadow: 0 12px 30px rgba(155, 89, 182, 0.4);
+}
+
+.level-special-btn.has-missed {
+    animation: missedGlow 2s ease-in-out infinite;
+}
+
+.level-special-btn:disabled {
+    background: #BDC3C7;
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+.level-special-btn .special-count {
+    display: block;
+    font-size: 0.9rem;
+    font-weight: 600;
+    margin-top: 5px;
+    opacity: 0.95;
+}
+
+@keyframes missedGlow {
+    0%, 100% { box-shadow: var(--shadow-medium); }
+    50% { box-shadow: 0 0 30px rgba(187, 143, 206, 0.8), var(--shadow-medium); }
 }
 
 .level-btn {
@@ -265,7 +425,8 @@ button:active {
 
 /* ===== About Screen ===== */
 #about-screen {
-    background: var(--background-gradient);
+    background: transparent;
+    z-index: 2;
 }
 
 .about-content {
@@ -305,7 +466,449 @@ button:active {
 
 /* ===== Game Screen ===== */
 #game-screen {
+    background: transparent;
+    z-index: 2;
+}
+
+/* ===== Background Animation Layer ===== */
+/* 全局背景（覆盖所有界面，z-index 最低） */
+#global-bg {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+    z-index: 0;
+    pointer-events: none;
     background: linear-gradient(180deg, #87CEEB 0%, #E0F6FF 50%, #98D8AA 100%);
+}
+
+#global-bg > .cloud {
+    z-index: 1;
+}
+
+#global-bg-bubbles, #global-bg-stars {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+}
+
+#bg-layer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    z-index: 1;
+    pointer-events: none;
+}
+
+#bg-bubbles, #bg-stars {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+}
+
+/* 云朵 */
+.cloud {
+    position: absolute;
+    background: rgba(255, 255, 255, 0.85);
+    border-radius: 100px;
+    box-shadow: 0 4px 20px rgba(255, 255, 255, 0.5);
+    animation-name: cloudDrift;
+    animation-timing-function: linear;
+    animation-iteration-count: infinite;
+    animation-duration: 60s;
+    z-index: 1;
+}
+
+.cloud::before,
+.cloud::after {
+    content: '';
+    position: absolute;
+    background: rgba(255, 255, 255, 0.85);
+    border-radius: 50%;
+}
+
+.cloud-1 {
+    width: 120px;
+    height: 40px;
+    top: 12%;
+    animation-duration: 60s;
+    animation-delay: 0s;
+}
+.cloud-1::before {
+    width: 50px; height: 50px; top: -25px; left: 20px;
+}
+.cloud-1::after {
+    width: 60px; height: 60px; top: -35px; left: 50px;
+}
+
+.cloud-2 {
+    width: 160px;
+    height: 45px;
+    top: 28%;
+    animation-duration: 80s;
+    animation-delay: -20s;
+    opacity: 0.7;
+}
+.cloud-2::before {
+    width: 55px; height: 55px; top: -30px; left: 30px;
+}
+.cloud-2::after {
+    width: 70px; height: 70px; top: -40px; left: 70px;
+}
+
+.cloud-3 {
+    width: 90px;
+    height: 35px;
+    top: 8%;
+    animation-duration: 50s;
+    animation-delay: -35s;
+    opacity: 0.9;
+}
+.cloud-3::before {
+    width: 40px; height: 40px; top: -20px; left: 15px;
+}
+.cloud-3::after {
+    width: 50px; height: 50px; top: -25px; left: 35px;
+}
+
+.cloud-4 {
+    width: 140px;
+    height: 42px;
+    top: 20%;
+    animation-duration: 70s;
+    animation-delay: -10s;
+    opacity: 0.6;
+}
+.cloud-4::before {
+    width: 50px; height: 50px; top: -25px; left: 25px;
+}
+.cloud-4::after {
+    width: 65px; height: 65px; top: -32px; left: 60px;
+}
+
+@keyframes cloudDrift {
+    0% {
+        transform: translateX(-200px);
+    }
+    100% {
+        transform: translateX(calc(100vw + 200px));
+    }
+}
+
+/* 彩色气泡/光斑 */
+.bg-bubble {
+    position: absolute;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(255,255,255,0.8) 0%, rgba(255,255,255,0.2) 60%, transparent 100%);
+    animation: bubbleFloat linear infinite;
+    pointer-events: none;
+    box-shadow: 0 0 12px rgba(255, 255, 255, 0.4);
+    z-index: 1;
+}
+
+.bg-bubble.tint-1 { background: radial-gradient(circle, rgba(255,182,193,0.7), transparent 70%); box-shadow: 0 0 15px rgba(255,182,193,0.5); }
+.bg-bubble.tint-2 { background: radial-gradient(circle, rgba(173,216,230,0.7), transparent 70%); box-shadow: 0 0 15px rgba(173,216,230,0.5); }
+.bg-bubble.tint-3 { background: radial-gradient(circle, rgba(255,255,200,0.7), transparent 70%); box-shadow: 0 0 15px rgba(255,255,200,0.5); }
+.bg-bubble.tint-4 { background: radial-gradient(circle, rgba(200,255,200,0.7), transparent 70%); box-shadow: 0 0 15px rgba(200,255,200,0.5); }
+.bg-bubble.tint-5 { background: radial-gradient(circle, rgba(220,180,255,0.7), transparent 70%); box-shadow: 0 0 15px rgba(220,180,255,0.5); }
+
+@keyframes bubbleFloat {
+    0% {
+        transform: translateY(0) translateX(0) scale(0.5);
+        opacity: 0;
+    }
+    10% {
+        opacity: 0.8;
+    }
+    90% {
+        opacity: 0.8;
+    }
+    100% {
+        transform: translateY(-110vh) translateX(var(--drift, 30px)) scale(1.2);
+        opacity: 0;
+    }
+}
+
+/* 闪光星星 */
+.bg-star {
+    position: absolute;
+    width: 4px;
+    height: 4px;
+    background: white;
+    border-radius: 50%;
+    box-shadow: 0 0 8px white, 0 0 16px rgba(255,255,200,0.6);
+    animation: starTwinkleBg ease-in-out infinite;
+    pointer-events: none;
+    z-index: 1;
+}
+
+@keyframes starTwinkleBg {
+    0%, 100% { opacity: 0.3; transform: scale(0.8); }
+    50% { opacity: 1; transform: scale(1.4); }
+}
+
+
+/* ===== 彩色气球 ===== */
+#balloons-container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 1;
+    pointer-events: none;
+    overflow: hidden;
+}
+
+.balloon {
+    position: absolute;
+    bottom: 0;
+    width: 40px;
+    height: 50px;
+    animation: balloonRise linear infinite;
+    transform-origin: center bottom;
+}
+
+.balloon .balloon-body {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 40px;
+    height: 46px;
+    border-radius: 50% 50% 50% 50% / 55% 55% 45% 45%;
+    background: var(--balloon-color, #FF6B6B);
+    box-shadow:
+        inset -6px -8px 12px rgba(0, 0, 0, 0.15),
+        inset 6px 4px 8px rgba(255, 255, 255, 0.5);
+}
+
+.balloon .balloon-body::after {
+    content: '';
+    position: absolute;
+    bottom: -3px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 0;
+    height: 0;
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-top: 8px solid var(--balloon-color, #FF6B6B);
+}
+
+.balloon .balloon-string {
+    position: absolute;
+    top: 46px;
+    left: 50%;
+    width: 1.5px;
+    height: 50px;
+    background: rgba(80, 80, 80, 0.6);
+    transform-origin: top center;
+    animation: stringSway ease-in-out infinite;
+}
+
+@keyframes balloonRise {
+    0% {
+        transform: translateY(0) rotate(-3deg);
+        opacity: 0;
+    }
+    8% {
+        opacity: 1;
+    }
+    50% {
+        transform: translateY(-55vh) rotate(3deg) translateX(15px);
+    }
+    92% {
+        opacity: 1;
+    }
+    100% {
+        transform: translateY(-115vh) rotate(-3deg) translateX(-10px);
+        opacity: 0;
+    }
+}
+
+@keyframes stringSway {
+    0%, 100% { transform: rotate(-2deg); }
+    50% { transform: rotate(2deg); }
+}
+
+/* ===== 地面 + 草地 ===== */
+.ground {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 90px;
+    background: linear-gradient(180deg, #6BB36A 0%, #4A9A4A 60%, #3D7A3D 100%);
+    box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.15) inset;
+    z-index: 2;
+}
+
+.ground::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: -6px;
+    height: 12px;
+    background:
+        radial-gradient(ellipse 20px 6px at 10% 50%, #6BB36A 60%, transparent 61%),
+        radial-gradient(ellipse 30px 7px at 25% 50%, #5FA85F 60%, transparent 61%),
+        radial-gradient(ellipse 24px 6px at 40% 50%, #6BB36A 60%, transparent 61%),
+        radial-gradient(ellipse 28px 7px at 55% 50%, #5FA85F 60%, transparent 61%),
+        radial-gradient(ellipse 22px 6px at 70% 50%, #6BB36A 60%, transparent 61%),
+        radial-gradient(ellipse 30px 7px at 85% 50%, #5FA85F 60%, transparent 61%),
+        radial-gradient(ellipse 26px 6px at 95% 50%, #6BB36A 60%, transparent 61%);
+}
+
+#grass-container {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 60px;
+    height: 50px;
+    z-index: 3;
+    pointer-events: none;
+}
+
+.grass-blade {
+    position: absolute;
+    bottom: 0;
+    width: 6px;
+    transform-origin: 50% 100%;
+    animation: grassSway ease-in-out infinite;
+    background: linear-gradient(180deg, #7BC97B 0%, #4A9A4A 100%);
+    border-radius: 50% 50% 5% 5%;
+    box-shadow: inset -1px 0 1px rgba(0, 0, 0, 0.1);
+}
+
+.grass-blade.tall {
+    width: 7px;
+    height: 38px;
+}
+
+.grass-blade.medium {
+    width: 5px;
+    height: 28px;
+}
+
+.grass-blade.short {
+    width: 4px;
+    height: 20px;
+}
+
+@keyframes grassSway {
+    0%, 100% { transform: rotate(-3deg); }
+    50% { transform: rotate(3deg); }
+}
+
+/* 小花点缀 */
+.flower {
+    position: absolute;
+    bottom: 0;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    z-index: 3;
+    box-shadow: 0 0 4px rgba(255, 255, 255, 0.6);
+    animation: grassSway ease-in-out infinite;
+    transform-origin: 50% 100%;
+}
+
+.flower::before {
+    content: '';
+    position: absolute;
+    width: 2px;
+    height: 12px;
+    background: #4A9A4A;
+    left: 3px;
+    top: 6px;
+    border-radius: 1px;
+}
+
+/* ===== 飞行动物：蜜蜂 ===== */
+#flyers-container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 60%;
+    z-index: 1;
+    pointer-events: none;
+    overflow: hidden;
+}
+
+/* 蜜蜂 */
+.bee {
+    position: absolute;
+    font-size: 18px;
+    animation: beeFly ease-in-out infinite;
+    filter: drop-shadow(1px 1px 1px rgba(0, 0, 0, 0.2));
+}
+
+@keyframes beeFly {
+    0% {
+        transform: translate(0, 0) rotate(0deg);
+    }
+    20% {
+        transform: translate(40px, -25px) rotate(5deg);
+    }
+    40% {
+        transform: translate(80px, 5px) rotate(-3deg);
+    }
+    60% {
+        transform: translate(50px, -15px) rotate(4deg);
+    }
+    80% {
+        transform: translate(20px, 10px) rotate(-2deg);
+    }
+    100% {
+        transform: translate(0, 0) rotate(0deg);
+    }
+}
+
+@keyframes beeWing {
+    0%, 100% { transform: scaleY(1) rotate(0deg); }
+    50% { transform: scaleY(0.5) rotate(15deg); }
+}
+
+.bee .bee-wings {
+    display: inline-block;
+    animation: beeWing 0.15s ease-in-out infinite;
+    transform-origin: center;
+}
+
+/* 让单词气泡和释义区显示在背景之上 */
+#word-area, #meaning-area {
+    z-index: 2;
+    position: absolute;
+}
+#word-area {
+    top: 80px;
+    left: 0;
+    width: 100%;
+    height: calc(100% - 200px);
+    overflow: hidden;
+}
+#meaning-area {
+    bottom: 80px;
+    left: 0;
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 20px;
+}
+.game-header, .game-footer {
+    z-index: 10;
 }
 
 .game-header {
@@ -423,6 +1026,52 @@ button:active {
 
 .word-bubble:active {
     transform: scale(0.95);
+}
+
+/* 手柄聚焦：当前选中的单词气泡 — 蓝色边框 + 闪烁动画 */
+.word-bubble.focused {
+    transform: scale(1.18);
+    box-shadow: 0 0 0 5px #2196F3,
+                0 0 30px #2196F3,
+                var(--shadow-medium);
+    z-index: 5;
+    animation: focusedBlink 0.6s ease-in-out infinite;
+}
+
+@keyframes focusedBlink {
+    0%, 100% {
+        box-shadow: 0 0 0 4px #2196F3, 0 0 16px #2196F3, var(--shadow-medium);
+        transform: scale(1.18);
+    }
+    50% {
+        box-shadow: 0 0 0 8px #64B5F6, 0 0 40px #2196F3, 0 0 60px #64B5F6, var(--shadow-medium);
+        transform: scale(1.25);
+    }
+}
+
+/* 错词点击：爆炸消失动画 */
+.word-bubble.wrong {
+    animation: wrongExplode 0.5s ease-out forwards;
+    pointer-events: none;
+}
+
+@keyframes wrongExplode {
+    0% {
+        transform: scale(1);
+        opacity: 1;
+        filter: brightness(1) hue-rotate(0deg);
+    }
+    20% {
+        transform: scale(1.3);
+        opacity: 1;
+        filter: brightness(2) hue-rotate(-30deg);
+        background: linear-gradient(135deg, #FF4444, #FF6B6B) !important;
+    }
+    100% {
+        transform: scale(1.8) rotate(15deg);
+        opacity: 0;
+        filter: brightness(3) hue-rotate(60deg);
+    }
 }
 
 .word-bubble.easy {

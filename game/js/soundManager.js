@@ -42,7 +42,9 @@ class SoundManager {
             combo: { frequency: 1320, duration: 0.15, type: 'sine' },
             levelUp: { frequency: 1760, duration: 0.3, type: 'sine' },
             gameOver: { frequency: 165, duration: 0.8, type: 'sawtooth' },
-            click: { frequency: 660, duration: 0.05, type: 'sine' }
+            click: { frequency: 660, duration: 0.05, type: 'sine' },
+            skip: { frequency: 440, duration: 0.2, type: 'triangle' },
+            firework: { frequency: 880, duration: 0.5, type: 'sine' }
         };
     }
 
@@ -56,6 +58,18 @@ class SoundManager {
 
         const sound = this.sounds[soundName];
         if (!sound) return;
+
+        // 'skip' 音效：双音提示（升-降），像"叮咚"
+        if (soundName === 'skip') {
+            this.playSkipChime();
+            return;
+        }
+
+        // 'firework' 音效：上升音 + 多组爆炸音
+        if (soundName === 'firework') {
+            this.playFirework();
+            return;
+        }
 
         const oscillator = this.audioContext.createOscillator();
         const gainNode = this.audioContext.createGain();
@@ -71,6 +85,72 @@ class SoundManager {
 
         oscillator.start();
         oscillator.stop(this.audioContext.currentTime + sound.duration);
+    }
+
+    playSkipChime() {
+        const ctx = this.audioContext;
+        const now = ctx.currentTime;
+
+        // 两个音：上升音 + 下降音
+        const tones = [
+            { freq: 660, start: 0,    dur: 0.15 },
+            { freq: 440, start: 0.12, dur: 0.20 }
+        ];
+
+        tones.forEach(t => {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(t.freq, now + t.start);
+            gain.gain.setValueAtTime(0.3, now + t.start);
+            gain.gain.exponentialRampToValueAtTime(0.01, now + t.start + t.dur);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start(now + t.start);
+            osc.stop(now + t.start + t.dur);
+        });
+    }
+
+    // 烟花庆祝音效：上升音 + 多组爆炸音
+    playFirework() {
+        const ctx = this.audioContext;
+        const now = ctx.currentTime;
+
+        // 1) 上升音（低频到高频）
+        const launch = ctx.createOscillator();
+        const launchGain = ctx.createGain();
+        launch.type = 'sine';
+        launch.frequency.setValueAtTime(220, now);
+        launch.frequency.exponentialRampToValueAtTime(1200, now + 0.3);
+        launchGain.gain.setValueAtTime(0.0001, now);
+        launchGain.gain.exponentialRampToValueAtTime(0.15, now + 0.05);
+        launchGain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+        launch.connect(launchGain);
+        launchGain.connect(ctx.destination);
+        launch.start(now);
+        launch.stop(now + 0.3);
+
+        // 2) 多组爆炸音（不同时间 + 不同频率）
+        const bursts = [
+            { start: 0.30, freq: 1500 },
+            { start: 0.40, freq: 1800 },
+            { start: 0.50, freq: 2200 },
+            { start: 0.65, freq: 1600 }
+        ];
+        bursts.forEach(b => {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(b.freq, now + b.start);
+            osc.frequency.exponentialRampToValueAtTime(b.freq * 0.4, now + b.start + 0.25);
+            gain.gain.setValueAtTime(0.0001, now + b.start);
+            gain.gain.exponentialRampToValueAtTime(0.25, now + b.start + 0.02);
+            gain.gain.exponentialRampToValueAtTime(0.01, now + b.start + 0.3);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start(now + b.start);
+            osc.stop(now + b.start + 0.3);
+        });
     }
 
     async playWordSound(word) {

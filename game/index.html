@@ -7,10 +7,26 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Comic+Neue:wght@400;700&family=Quicksand:wght@400;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="css/style.css">
-    <link rel="stylesheet" href="css/animations.css">
+    <link rel="stylesheet" href="css/style.css?v=20">
+    <link rel="stylesheet" href="css/animations.css?v=20">
 </head>
 <body>
+    <!-- 全局背景装饰（在所有界面显示） -->
+    <div id="global-bg">
+        <div class="cloud cloud-1"></div>
+        <div class="cloud cloud-2"></div>
+        <div class="cloud cloud-3"></div>
+        <div class="cloud cloud-4"></div>
+        <div id="global-bg-bubbles"></div>
+        <div id="global-bg-stars"></div>
+        <!-- 彩色气球 -->
+        <div id="balloons-container"></div>
+        <div id="flyers-container"></div>
+        <!-- 地面 + 草地 -->
+        <div class="ground"></div>
+        <div id="grass-container"></div>
+    </div>
+
     <div id="game-container">
         <!-- 开始界面 -->
         <div id="start-screen" class="screen active">
@@ -21,7 +37,12 @@
             <div class="start-buttons">
                 <div class="word-count-setting">
                     <label for="words-per-level">每关需要匹配：</label>
-                    <select id="words-per-level">
+                    <div class="setting-stepper" id="stepper-words-per-level" data-target="words-per-level">
+                        <button type="button" class="stepper-arrow stepper-prev" data-step="-1" tabindex="-1" aria-label="上一个选项">◀</button>
+                        <span class="stepper-value" id="display-words-per-level" aria-live="polite">25 个单词</span>
+                        <button type="button" class="stepper-arrow stepper-next" data-step="1" tabindex="-1" aria-label="下一个选项">▶</button>
+                    </div>
+                    <select id="words-per-level" class="visually-hidden" tabindex="-1" aria-hidden="true">
                         <option value="10">10 个单词</option>
                         <option value="15">15 个单词</option>
                         <option value="20">20 个单词</option>
@@ -33,19 +54,30 @@
                 </div>
                 <div class="word-count-setting">
                     <label for="lives-count">生命次数：</label>
-                    <select id="lives-count">
+                    <div class="setting-stepper" id="stepper-lives-count" data-target="lives-count">
+                        <button type="button" class="stepper-arrow stepper-prev" data-step="-1" tabindex="-1" aria-label="上一个选项">◀</button>
+                        <span class="stepper-value" id="display-lives-count" aria-live="polite">100 次</span>
+                        <button type="button" class="stepper-arrow stepper-next" data-step="1" tabindex="-1" aria-label="下一个选项">▶</button>
+                    </div>
+                    <select id="lives-count" class="visually-hidden" tabindex="-1" aria-hidden="true">
                         <option value="1">1 次</option>
-                        <option value="2">2 次</option>
                         <option value="3">3 次</option>
-                        <option value="4" selected>4 次</option>
                         <option value="5">5 次</option>
                         <option value="10">10 次</option>
+                        <option value="20">20 次</option>
+                        <option value="50">50 次</option>
+                        <option value="100" selected>100 次</option>
                         <option value="999">无限</option>
                     </select>
                 </div>
                 <div class="word-count-setting">
                     <label for="speed-setting">下落速度：</label>
-                    <select id="speed-setting">
+                    <div class="setting-stepper" id="stepper-speed-setting" data-target="speed-setting">
+                        <button type="button" class="stepper-arrow stepper-prev" data-step="-1" tabindex="-1" aria-label="上一个选项">◀</button>
+                        <span class="stepper-value" id="display-speed-setting" aria-live="polite">正常</span>
+                        <button type="button" class="stepper-arrow stepper-next" data-step="1" tabindex="-1" aria-label="下一个选项">▶</button>
+                    </div>
+                    <select id="speed-setting" class="visually-hidden" tabindex="-1" aria-hidden="true">
                         <option value="0.25">极慢</option>
                         <option value="0.5">很慢</option>
                         <option value="0.75">慢速</option>
@@ -69,7 +101,10 @@
                 <button id="btn-back-from-levels" class="btn-back">← 返回</button>
             </div>
             <div class="level-grid" id="level-grid">
-                <!-- 动态生成50个关卡按钮 -->
+                <!-- 动态生成50个关卡按钮 + 错词复习关卡 -->
+            </div>
+            <div class="level-special-row" id="level-special-row">
+                <!-- 错词复习关卡按钮 -->
             </div>
         </div>
 
@@ -117,11 +152,21 @@
                     <span id="progress">0/20</span>
                 </div>
                 <div class="stats-right">
+                    <span class="gamepad-indicator" id="gamepad-indicator">🎮 <span id="gamepad-name">已连接</span></span>
                     <span id="lives">剩余次数: 4</span>
                 </div>
             </div>
 
             <div id="game-area">
+                <!-- 背景动画层（云朵、彩色光斑、星光） -->
+                <div id="bg-layer">
+                    <div class="cloud cloud-1"></div>
+                    <div class="cloud cloud-2"></div>
+                    <div class="cloud cloud-3"></div>
+                    <div class="cloud cloud-4"></div>
+                    <div class="bg-bubbles" id="bg-bubbles"></div>
+                    <div class="bg-stars" id="bg-stars"></div>
+                </div>
                 <!-- 顶部单词下落区域 -->
                 <div id="word-area"></div>
 
@@ -180,11 +225,13 @@
         </div>
     </div>
 
-    <script src="lib/lottie.min.js"></script>
-    <script src="js/soundManager.js"></script>
-    <script src="js/animationPlayer.js"></script>
-    <script src="js/wordManager.js"></script>
-    <script src="js/collision.js"></script>
-    <script src="js/game.js"></script>
+    <script src="lib/lottie.min.js?v=20"></script>
+    <script src="js/soundManager.js?v=20"></script>
+    <script src="js/animationPlayer.js?v=20"></script>
+    <script src="js/backgroundAnimator.js?v=20"></script>
+    <script src="js/wordManager.js?v=20"></script>
+    <script src="js/collision.js?v=20"></script>
+    <script src="js/game.js?v=20"></script>
+    <script src="js/gamepadController.js?v=20"></script>
 </body>
 </html>
