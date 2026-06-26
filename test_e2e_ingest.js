@@ -56,23 +56,34 @@ function record(name, ok, detail = '') {
         if (msg.type() === 'error') jsErrors.push(msg.text());
     });
 
-    // 1. 直接通过 API 创建用户和词库（前端依赖这两个 entity）
-    const userId = `u_e2e_ingest_${Date.now()}`;
-    const libResp = await page.request.post(`${BACKEND_URL}/api/libraries?user_id=${userId}`, {
-        data: { name: `E2E导入测试-${Date.now()}` },
+    // 0. 注册测试账号 + 拿 JWT（task #36 后所有 API 都需鉴权）
+    const username = `ingest_${Date.now().toString(36)}`;
+    const regResp = await page.request.post(`${BACKEND_URL}/api/auth/register`, {
+        data: { username, password: 'test123456' },
         headers: { 'Content-Type': 'application/json' },
     });
-    const libId = (await libResp.json()).id;
-    record('T1: 创建目标词库', !!libId, `lib_id=${libId.slice(0, 8)}...`);
+    const regData = await regResp.json();
+    const token = regData.token;
+    const authHeaders = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+    record('T0: 注册测试账号拿 JWT', !!token, `account=${regData.account?.id}`);
+
+    // 1. 创建目标词库（用 JWT）
+    const libResp = await page.request.post(`${BACKEND_URL}/api/libraries`, {
+        data: { name: `E2E导入测试-${Date.now()}` },
+        headers: authHeaders,
+    });
+    const libJson = await libResp.json();
+    const libId = libJson.id;
+    record('T1: 创建目标词库', !!libId, `lib_id=${libId?.slice(0, 8)}... status=${libResp.status()}`);
 
     // 2. 直接通过 API 上传文件 + 触发 pipeline（绕过前端 UI 简化测试）
     const fileBuf = fs.readFileSync(FIXTURE_TXT);
     const uploadResp = await page.request.post(`${BACKEND_URL}/api/upload`, {
         multipart: {
             file: { name: 'sample.txt', mimeType: 'text/plain', buffer: fileBuf },
-            user_id: userId,
             target_library_id: libId,
         },
+        headers: { Authorization: `Bearer ${token}` },
     });
     if (uploadResp.status() !== 201) {
         record('T2: 上传文件', false, `status=${uploadResp.status()} body=${(await uploadResp.text()).slice(0, 200)}`);
@@ -86,7 +97,9 @@ function record(name, ok, detail = '') {
     if (jobId) {
         let finalJob = null;
         for (let i = 0; i < 60; i++) {
-            const r = await page.request.get(`${BACKEND_URL}/api/jobs/${jobId}`);
+            const r = await page.request.get(`${BACKEND_URL}/api/jobs/${jobId}`, {
+                headers: { Authorization: `Bearer ${token}` },
+            });
             finalJob = await r.json();
             if (finalJob.status === 'completed' || finalJob.status === 'failed') break;
             await new Promise(r => setTimeout(r, 1000));
@@ -101,7 +114,9 @@ function record(name, ok, detail = '') {
         );
 
         // 4. 查询词库单词列表
-        const wordsResp = await page.request.get(`${BACKEND_URL}/api/libraries/${libId}/words`);
+        const wordsResp = await page.request.get(`${BACKEND_URL}/api/libraries/${libId}/words`, {
+            headers: { Authorization: `Bearer ${token}` },
+        });
         const wordsJson = await wordsResp.json();
         // API 返回裸数组 [{word, meaning, ...}, ...]
         const words = Array.isArray(wordsJson) ? wordsJson : (wordsJson.words || []);
