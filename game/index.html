@@ -7,8 +7,8 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Comic+Neue:wght@400;700&family=Quicksand:wght@400;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="css/style.css?v=21">
-    <link rel="stylesheet" href="css/animations.css?v=21">
+    <link rel="stylesheet" href="css/style.css?v=22">
+    <link rel="stylesheet" href="css/animations.css?v=22">
 </head>
 <body>
     <!-- 全局背景装饰（在所有界面显示） -->
@@ -97,6 +97,45 @@
                 <button id="btn-levels" class="btn-secondary" onclick="console.log('Levels clicked!'); game.showLevelSelect();">选择关卡</button>
                 <button id="btn-ranking" class="btn-secondary">🏆 排行榜</button>
                 <button id="btn-about" class="btn-secondary" onclick="console.log('About clicked!'); game.showScreen('about-screen');">游戏说明</button>
+
+                <!-- 语音设置（折叠面板） -->
+                <details class="voice-settings-panel">
+                    <summary>🎙️ 语音设置</summary>
+                    <div class="voice-settings-body">
+                        <label>
+                            <span>英文音色</span>
+                            <select id="voice-en">
+                                <option value="English_LovelyGirl">English_LovelyGirl（可爱女童）</option>
+                                <option value="English_radiant_girl">English_radiant_girl（活泼女童）</option>
+                                <option value="English_AnimeCharacter">English_AnimeCharacter（动漫角色）</option>
+                                <option value="English_PassionateWarrior">English_PassionateWarrior（热血少年）</option>
+                            </select>
+                        </label>
+                        <label>
+                            <span>中文音色</span>
+                            <select id="voice-zh">
+                                <option value="Chinese (Mandarin)_Cute_Spirit">Cute_Spirit（可爱灵气）</option>
+                                <option value="Chinese (Mandarin)_Warm_Bestie">Warm_Bestie（温暖闺蜜）</option>
+                                <option value="Chinese (Mandarin)_HK_Flight_Attendant">HK_Flight_Attendant（港式空姐）</option>
+                                <option value="Chinese (Mandarin)_Sweet_Lady">Sweet_Lady（甜美女声）</option>
+                            </select>
+                        </label>
+                        <label>
+                            <span>语速 <em id="val-speed">0.85</em></span>
+                            <input type="range" id="voice-speed" min="0.5" max="1.5" step="0.05" value="0.85">
+                        </label>
+                        <label>
+                            <span>音调 <em id="val-pitch">+2</em></span>
+                            <input type="range" id="voice-pitch" min="-5" max="5" step="1" value="2">
+                        </label>
+                        <label>
+                            <span>音量 <em id="val-vol">100%</em></span>
+                            <input type="range" id="voice-vol" min="0" max="1" step="0.1" value="1.0">
+                        </label>
+                        <button type="button" id="btn-voice-preview">🔊 试听当前配置</button>
+                        <p class="voice-hint">⚠️ 改动音色/语速/音调后需重新生成音频才生效：<br><code>python3 generate_voices.py --force</code></p>
+                    </div>
+                </details>
             </div>
         </div>
 
@@ -258,13 +297,14 @@
         </div>
     </div>
 
-    <script src="lib/lottie.min.js?v=21"></script>
-    <script src="js/soundManager.js?v=21"></script>
-    <script src="js/animationPlayer.js?v=21"></script>
-    <script src="js/backgroundAnimator.js?v=21"></script>
-    <script src="js/wordManager.js?v=21"></script>
-    <script src="js/collision.js?v=21"></script>
-    <script src="js/game.js?v=21"></script>
-    <script src="js/gamepadController.js?v=21"></script>
+    <script src="lib/lottie.min.js?v=22"></script>
+    <script src="js/config.js?v=22"></script>
+    <script src="js/soundManager.js?v=25"></script>
+    <script src="js/animationPlayer.js?v=22"></script>
+    <script src="js/backgroundAnimator.js?v=22"></script>
+    <script src="js/wordManager.js?v=22"></script>
+    <script src="js/collision.js?v=22"></script>
+    <script src="js/game.js?v=27"></script>
+    <script src="js/gamepadController.js?v=22"></script>
 </body>
 </html>

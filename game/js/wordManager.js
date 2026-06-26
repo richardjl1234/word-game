@@ -3,6 +3,26 @@
  * 负责加载词库数据、管理关卡进度、处理单词生成
  */
 
+/**
+ * 与 add_audio_paths.py 保持一致的工具函数。
+ *
+ * - md5short(text)：旧版哈希命名（兼容历史存档），保留以便向后兼容
+ * - safeFilename(text)：与 generate_voices.py / add_audio_paths.py 一致，
+ *   当前权威的 mp3 文件名生成方式。人类可读、URL 友好（前端 fetch 时浏览器自动 encode）。
+ */
+function md5short(text) {
+    let h = 0;
+    for (let i = 0; i < text.length; i++) {
+        h = ((h << 5) - h) + text.charCodeAt(i);
+        h |= 0;
+    }
+    return Math.abs(h).toString(16).padStart(8, '0').slice(0, 8);
+}
+
+function safeFilename(name) {
+    return String(name).replace(/[<>:"/\\|?*]/g, '_');
+}
+
 class WordManager {
     constructor() {
         this.wordsData = [];
@@ -273,6 +293,9 @@ class WordManager {
                 word: wordData.word,
                 meaning: wordData.meaning,
                 difficulty: wordData.difficulty,
+                // ★ 关键：写入时就把音频路径存进存档
+                audio_en: wordData.audio_en || `sounds/en/${safeFilename(wordData.word)}.mp3`,
+                audio_zh: wordData.audio_zh || `sounds/zh/${safeFilename(wordData.meaning)}.mp3`,
                 missedAt: Date.now()
             });
             this.saveProgress();
@@ -496,13 +519,15 @@ class WordManager {
             // 进入错题关卡前，先清理已掌握 3 次的错词
             this.cleanupMasteredWords();
             // 错词关卡：目标词池 = 错词本（每个错词要重复 3 次才算掌握）
+            // ★ 关键：保留 audio_en/audio_zh 字段，老存档无字段时用 fallback
             this.currentLevelWords = this.getMissedWords().map(m => ({
                 word: m.word,
                 meaning: m.meaning,
                 difficulty: m.difficulty,
                 letter_count: m.word.length,
                 syllable_count: 1,
-                audio_path: `sounds/${m.word}.mp3`
+                audio_en: m.audio_en || `sounds/en/${safeFilename(m.word)}.mp3`,
+                audio_zh: m.audio_zh || `sounds/zh/${safeFilename(m.meaning)}.mp3`
             }));
             // 干扰词池：错词本中所有 difficulty 范围内的单词（独立池，足够大）
             this.distractorPool = this.getLevelWords('missed');

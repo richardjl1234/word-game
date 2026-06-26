@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>L1 单词音色对比 - Word Game</title>
+    <style>
+        body {
+            font-family: -apple-system, "PingFang SC", sans-serif;
+            max-width: 1000px;
+            margin: 30px auto;
+            padding: 20px;
+            background: #fafafa;
+        }
+        h1 { color: #333; }
+        h2 { color: #555; border-bottom: 2px solid #ddd; padding-bottom: 6px; margin-top: 24px; }
+        .word-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .word-table th, .word-table td {
+            padding: 12px 8px;
+            text-align: center;
+            border-bottom: 1px solid #eee;
+        }
+        .word-table th { background: #f0f0f0; font-weight: 700; }
+        .word-table .word-cell { font-weight: 700; font-size: 1.1em; color: #2196F3; }
+        .word-table .from-game { background: #fff3e0; }
+        .word-table .p2 { background: #e3f2fd; }
+        .word-table .p5 { background: #f3e5f5; }
+        audio { height: 28px; width: 100%; max-width: 220px; }
+        .info {
+            background: #fff3cd;
+            border: 1px solid #ffc107;
+            border-radius: 8px;
+            padding: 12px;
+            margin: 16px 0;
+        }
+        .key { font-family: monospace; background: #eee; padding: 2px 6px; border-radius: 4px; }
+    </style>
+</head>
+<body>
+    <h1>🎙️ L1 单词音色对比</h1>
+
+    <div class="info">
+        <strong>📌 用法：</strong>对每个 L1 单词，并排听三个版本：
+        <ul>
+            <li><strong style="color:#E65100">FROM GAME</strong>：当前游戏里实际播放的 mp3（pitch=+2, 第一次批量生成）</li>
+            <li><strong style="color:#1565C0">PITCH +2</strong>：用相同参数（LovelyGirl, speed=0.85, pitch=+2）刚才新生成的</li>
+            <li><strong style="color:#6A1B9A">PITCH +5</strong>：用 pitch=+5 重新生成（高音版）</li>
+        </ul>
+        <strong>🎯 目标</strong>：对比每行三个 audio，应该是<strong>同一种声音</strong>（音调高低不同但音色一致）。
+        如果 FROM GAME 和 PITCH +2 听起来差距很大 → 游戏里 rob.mp3 实际生成时用了不同的参数。
+        如果听起来一样 → 之前用户感觉的"不一样"可能是不同上下文（句子 vs 单词）造成的错觉。
+    </div>
+
+    <h2>📊 对比表</h2>
+    <table class="word-table">
+        <thead>
+            <tr>
+                <th>单词</th>
+                <th style="color:#E65100">FROM GAME<br><small>游戏内实际</small></th>
+                <th style="color:#1565C0">PITCH +2<br><small>刚新生成</small></th>
+                <th style="color:#6A1B9A">PITCH +5<br><small>高音版</small></th>
+            </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+    </table>
+
+    <div class="info" style="margin-top: 24px;">
+        <strong>💡 判断标准：</strong>
+        <ul>
+            <li>如果 <strong>FROM GAME ≈ PITCH +2</strong> 但 ≠ PITCH +5 → 游戏是正确参数，听感差异是 MiniMax 非确定性导致的小波动（可接受）</li>
+            <li>如果 <strong>FROM GAME ≈ PITCH +5</strong> → 之前 batch 实际用了 pitch=+5（不是 +2）</li>
+            <li>如果三个都明显不同 → 可能是别的变量（speed, voice_id 等）</li>
+        </ul>
+    </div>
+
+    <script>
+        const WORDS = ['rob', 'lid', 'gun', 'to', 'is'];
+        const tbody = document.getElementById('rows');
+
+        WORDS.forEach(word => {
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td class="word-cell">${word}</td>
+                <td class="from-game"><audio controls preload="none" src="sounds/samples/en/L1_compare/${word}_FROM_GAME.mp3"></audio></td>
+                <td class="p2"><audio controls preload="none" src="sounds/samples/en/L1_compare/${word}_p2.mp3"></audio></td>
+                <td class="p5"><audio controls preload="none" src="sounds/samples/en/L1_compare/${word}_p5.mp3"></audio></td>
+            `;
+            tbody.appendChild(row);
+        });
+    </script>
+</body>
+</html>

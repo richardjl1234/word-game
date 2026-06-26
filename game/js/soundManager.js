@@ -13,6 +13,16 @@ class SoundManager {
         this.minimaxGroupId = '';
         this.voiceId = 'Chinese (Mandarin)_Cute_Spirit';
         this.initialized = false;
+
+        // TTS 配置（从 config.js + localStorage 合并）
+        this.ttsConfig = null;        // 完整配置
+        this.voiceEN = 'English_LovelyGirl';
+        this.voiceZH = 'Chinese (Mandarin)_Cute_Spirit';
+        this.defaults = { speed: 0.85, pitch: 2, vol: 1.0 };
+
+        // 播放速度（用 audio.playbackRate 控制，无需重新生成 mp3）
+        // 0.7 = 比默认慢 30%，preservesPitch 保证音调不变（避免变低沉）
+        this.playbackRate = 0.85;
     }
 
     async init() {
@@ -20,6 +30,16 @@ class SoundManager {
         const config = window.MINIMAX_CONFIG || {};
         this.minimaxApiKey = config.apiKey || '';
         this.minimaxGroupId = config.groupId || '';
+
+        // 解析 TTS 配置
+        this.ttsConfig = config.tts || {};
+        this.voiceEN = this.ttsConfig.voices?.en || 'English_LovelyGirl';
+        this.voiceZH = this.ttsConfig.voices?.zh || 'Chinese (Mandarin)_Cute_Spirit';
+        this.defaults = {
+            speed: this.ttsConfig.defaults?.speed ?? 0.85,
+            pitch: this.ttsConfig.defaults?.pitch ?? 2,
+            vol:   this.ttsConfig.defaults?.vol   ?? 1.0
+        };
 
         // 初始化Web Audio API
         try {
@@ -235,6 +255,216 @@ class SoundManager {
             source.start();
         } catch (error) {
             console.warn('Sound file playback failed:', error);
+        }
+    }
+
+    // ============================================================
+    // 单词 TTS 播放（mp3 + Web Speech fallback）
+    // ============================================================
+
+    /**
+     * 播放一个 mp3 文件（相对或绝对路径），自动缓存。
+     *
+     * 错误处理语义：
+     *   - NotAllowedError（浏览器自动播放策略）→ resolve（不算错误，等用户交互）
+     *   - 其他错误（load 失败、404 等）→ reject，让调用方 fallback
+     *
+     * 路径处理：用 encodeURI() 处理中文文件名
+     * （sounds/zh/抢劫.mp3 → sounds/zh/%E6%8A%A2%E5%8A%AB.mp3），
+     * 更可靠避免 fetch 失败。
+     */
+    async playAudioFile(relativePath) {
+        if (!this.enabled || !relativePath) return;
+        // 关键：每次都创建新 Audio 对象，避免复用 cached 对象导致
+        // play() 在已 ended / paused / error 状态上失败 → fallback → Web Speech 男声
+        const url = /[^\x00-\x7F]/.test(relativePath) ? encodeURI(relativePath) : relativePath;
+        const audio = new Audio(url);
+        audio.preload = 'auto';
+        // 用 playbackRate 让 mp3 播放更慢，preservesPitch 保证音调不变
+        // （否则低音 + 慢速会变成男声）
+        audio.playbackRate = this.playbackRate;
+        if ('preservesPitch' in audio) audio.preservesPitch = true;
+        else if ('webkitPreservesPitch' in audio) audio.webkitPreservesPitch = true;
+        else if ('mozPreservesPitch' in audio) audio.mozPreservesPitch = true;
+        // 监听 load 错误以便诊断（不影响 play() 的 promise）
+        audio.addEventListener('error', () => {
+            if (!this._erroredPaths) this._erroredPaths = new Set();
+            if (!this._erroredPaths.has(relativePath)) {
+                this._erroredPaths.add(relativePath);
+                console.warn('[soundManager] Audio load failed:', relativePath, audio.error?.message || 'unknown');
+            }
+        });
+        try {
+            await audio.play();
+            return;  // 成功
+        } catch (e) {
+            // 自动播放策略阻止（首次用户交互前），不算错误，静默忽略
+            if (e && e.name === 'NotAllowedError') {
+                if (!this._warnedAutoplay) {
+                    this._warnedAutoplay = true;
+                    console.info('[soundManager] Audio play waiting for user gesture...');
+                }
+                return;
+            }
+            // 其他错误（load 失败等）→ 抛出让调用方 fallback
+            throw e;
+        }
+    }
+
+    /**
+     * 播放英文单词 1 次（答对时调用）。
+     * 若 mp3 缺失则降级到 Web Speech API。
+     */
+    playEnglishWordOnce(wordData) {
+        if (!this.enabled) return;
+        if (!wordData || !wordData.word) return;
+
+        const path = wordData.audio_en;
+        const playOnce = async () => {
+            if (path) {
+                try {
+                    await this.playAudioFile(path);
+                    return;
+                } catch (e) {
+                    console.warn('[soundManager] 英文 mp3 失败 → fallback:',
+                        path, '|', e.name, e.message);
+                }
+            } else {
+                console.warn('[soundManager] wordData.audio_en 为空 → fallback:', wordData.word);
+            }
+            this.playWordFallback(wordData.word, 'en-US');
+        };
+        playOnce().catch(e => console.warn('playEnglishWordOnce error:', e));
+    }
+
+    /**
+     * 答对时播放英文单词 1 次，等 pauseMs 毫秒后调用 callback
+     * （callback 通常用来切换到下一个目标，让 setNextTarget 内部
+     *  播新目标的中文 —— 这样孩子听到的是：英文 → 0.5s → 下一个中文，
+     *  而不是英文 → 0.5s → 当前中文的重复）
+     */
+    playEnglishThenCallback(wordData, pauseMs, callback) {
+        if (!this.enabled) {
+            if (typeof callback === 'function') callback();
+            return;
+        }
+        if (!wordData || !wordData.word) {
+            if (typeof callback === 'function') callback();
+            return;
+        }
+
+        const playSeq = async () => {
+            // 1) 英文 1 次
+            const enPath = wordData.audio_en;
+            if (enPath) {
+                try {
+                    await this.playAudioFile(enPath);
+                } catch (e) {
+                    console.warn('[soundManager] 英文 mp3 失败 → fallback:', enPath);
+                    this.playWordFallback(wordData.word, 'en-US');
+                }
+            } else {
+                this.playWordFallback(wordData.word, 'en-US');
+            }
+            // 2) 间隔
+            await new Promise(r => setTimeout(r, pauseMs));
+            // 3) 切换到下一个目标（callback 里调 setNextTarget，自然会播下一个中文）
+            if (typeof callback === 'function') callback();
+        };
+        playSeq().catch(e => console.warn('playEnglishThenCallback error:', e));
+    }
+
+    /**
+     * 播放中文释义。若 mp3 缺失则降级到 Web Speech API。
+     */
+    playChineseMeaning(meaning, wordData) {
+        if (!this.enabled || !meaning) return;
+        const path = wordData && wordData.audio_zh;
+        if (path) {
+            // 异步播放但不 await（不阻塞调用方）
+            this.playAudioFile(path).catch((e) => {
+                console.warn('[soundManager] 中文 mp3 失败 → fallback:', path, '|', e.name, e.message);
+                this.playWordFallback(meaning, 'zh-CN');
+            });
+        } else {
+            console.warn('[soundManager] wordData.audio_zh 为空 → fallback:', meaning);
+            this.playWordFallback(meaning, 'zh-CN');
+        }
+    }
+
+    /**
+     * 用 Web Speech API 播放（fallback）。
+     * 接受可选 lang 参数，默认为 en-US（保持向后兼容）。
+     */
+    playWordFallback(text, lang = 'en-US') {
+        if (!('speechSynthesis' in window)) return;
+        try {
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.lang = lang;
+            utterance.rate = 0.9;
+            utterance.pitch = lang.startsWith('zh') ? 1.2 : 1.1;
+            speechSynthesis.cancel();  // 取消正在播放的，避免重叠
+            speechSynthesis.speak(utterance);
+        } catch (e) {
+            // ignore
+        }
+    }
+
+    /**
+     * 预加载一组单词的 mp3（关卡开始时调用，把 25 英文 + 25 中文全部 fetch 一次）。
+     * 用 <link rel="prefetch"> 让浏览器提前缓存到磁盘，避免在 playAudioFile 时
+     * 才去下载（避免 play() 因 readyState=0 失败导致 fallback 到 Web Speech）。
+     */
+    preloadLevelWords(words) {
+        if (!this.enabled || !Array.isArray(words)) return;
+        const paths = new Set();
+        for (const w of words) {
+            if (w.audio_en) paths.add(w.audio_en);
+            if (w.audio_zh) paths.add(w.audio_zh);
+        }
+        paths.forEach(p => {
+            const url = /[^\x00-\x7F]/.test(p) ? encodeURI(p) : p;
+            const link = document.createElement('link');
+            link.rel = 'prefetch';
+            link.as = 'audio';
+            link.href = url;
+            document.head.appendChild(link);
+        });
+    }
+
+    /**
+     * 试听当前 UI 配置（用 Web Speech API 模拟，不依赖 mp3）。
+     * 给"语音设置"面板的"试听"按钮用。
+     */
+    previewVoiceSettings() {
+        const enSel = document.getElementById('voice-en');
+        const zhSel = document.getElementById('voice-zh');
+        const speed = parseFloat(document.getElementById('voice-speed')?.value ?? '0.85');
+        const pitch = parseInt(document.getElementById('voice-pitch')?.value ?? '2');
+        const vol = parseFloat(document.getElementById('voice-vol')?.value ?? '1.0');
+
+        if (!('speechSynthesis' in window)) {
+            alert('当前浏览器不支持 Web Speech API，无法试听');
+            return;
+        }
+        try {
+            speechSynthesis.cancel();
+            const en = new SpeechSynthesisUtterance('apple');
+            en.lang = 'en-US';
+            en.rate = Math.max(0.5, Math.min(2.0, speed));
+            en.pitch = Math.max(0.5, Math.min(2.0, 1 + pitch * 0.1));
+            en.volume = vol;
+            speechSynthesis.speak(en);
+            setTimeout(() => {
+                const zh = new SpeechSynthesisUtterance('苹果');
+                zh.lang = 'zh-CN';
+                zh.rate = en.rate;
+                zh.pitch = en.pitch;
+                zh.volume = en.volume;
+                speechSynthesis.speak(zh);
+            }, 1500);
+        } catch (e) {
+            console.warn('previewVoiceSettings error:', e);
         }
     }
 }
