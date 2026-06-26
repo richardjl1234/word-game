@@ -73,6 +73,9 @@ button:active {
 
 .screen.active {
     display: flex;
+    justify-content: flex-start;
+    align-items: flex-start;
+    overflow-y: auto;
 }
 
 .overlay {
@@ -1565,6 +1568,7 @@ button:active {
         padding: 12px 20px;
         min-width: 115px;
     }
+}
 
 @media (max-width: 480px) {
     .level-grid {
@@ -1670,6 +1674,8 @@ button:active {
     max-width: 900px;
     width: 100%;
     margin: 0 auto;
+    flex: 0 1 auto;
+    max-height: calc(100vh - 100px);
 }
 
 .vocab-toolbar, .users-toolbar {
@@ -1814,6 +1820,10 @@ button:active {
     border: 3px dashed #ccc;
     border-radius: 16px;
     padding: 40px 20px;
+    min-height: 180px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     text-align: center;
     cursor: pointer;
     background: rgba(255,255,255,0.6);
@@ -1857,6 +1867,49 @@ button:active {
     font-size: 0.9rem;
     line-height: 1.6;
 }
+.import-status-block {
+    background: rgba(100,150,255,0.08);
+    border: 1px solid rgba(100,150,255,0.25);
+    border-radius: 10px;
+    padding: 14px 18px;
+    margin: 12px 0;
+    font-size: 0.95rem;
+}
+.import-status-main {
+    font-weight: 600;
+    font-size: 1.05rem;
+    margin-bottom: 8px;
+    color: #2c5fb3;
+}
+.import-progress-bar {
+    height: 8px;
+    background: rgba(0,0,0,0.08);
+    border-radius: 4px;
+    overflow: hidden;
+    margin-bottom: 8px;
+}
+.import-progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #4CAF50, #66BB6A);
+    transition: width 0.4s ease;
+}
+.import-status-detail {
+    font-size: 0.88rem;
+    color: #444;
+    line-height: 1.7;
+}
+.import-status-detail strong {
+    color: #1a3d6b;
+    font-weight: 700;
+}
+.import-status-error {
+    background: rgba(255,80,80,0.08);
+    border: 1px solid rgba(255,80,80,0.3);
+    color: #b32424;
+    padding: 12px 16px;
+    border-radius: 8px;
+    font-size: 0.9rem;
+}
 .import-hint code {
     background: #f4f4f4;
     padding: 2px 6px;
@@ -1877,4 +1930,175 @@ button:active {
     color: #999;
     font-size: 0.85rem;
     margin: 0;
+}
+
+/* ============================================================ */
+/* ★ 注册/登录界面 (task #36)                                   */
+/* ============================================================ */
+
+#auth-screen {
+    background: linear-gradient(135deg, #ffe9a8 0%, #ffd1dc 50%, #c1e3ff 100%);
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 20px;
+}
+
+.auth-container {
+    background: rgba(255, 255, 255, 0.95);
+    border-radius: 20px;
+    padding: 40px 36px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.12);
+    max-width: 420px;
+    width: 100%;
+    text-align: center;
+}
+
+.auth-title {
+    font-size: 2.2rem;
+    margin: 0 0 8px 0;
+    color: #6b4e16;
+    font-weight: 700;
+}
+
+.auth-tagline {
+    color: #888;
+    font-size: 0.95rem;
+    margin: 0 0 28px 0;
+}
+
+.auth-tabs {
+    display: flex;
+    border-bottom: 2px solid #f0e6d2;
+    margin-bottom: 24px;
+}
+
+.auth-tab {
+    flex: 1;
+    background: none;
+    border: none;
+    padding: 12px;
+    font-size: 1rem;
+    color: #999;
+    cursor: pointer;
+    border-bottom: 3px solid transparent;
+    margin-bottom: -2px;
+    transition: all 0.2s;
+    font-weight: 500;
+}
+
+.auth-tab:hover {
+    color: #6b4e16;
+}
+
+.auth-tab.active {
+    color: #d4a017;
+    border-bottom-color: #d4a017;
+    font-weight: 700;
+}
+
+.auth-form {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    text-align: left;
+}
+
+.auth-form label {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 0.9rem;
+    color: #555;
+    font-weight: 500;
+}
+
+.auth-form input {
+    padding: 12px 14px;
+    font-size: 1rem;
+    border: 2px solid #e8e0d0;
+    border-radius: 10px;
+    background: #fff;
+    transition: border-color 0.2s;
+    font-family: inherit;
+}
+
+.auth-form input:focus {
+    outline: none;
+    border-color: #d4a017;
+    box-shadow: 0 0 0 3px rgba(212, 160, 23, 0.1);
+}
+
+.auth-submit {
+    margin-top: 8px;
+    padding: 14px;
+    background: linear-gradient(135deg, #ffd54a 0%, #ffa726 100%);
+    color: #fff;
+    border: none;
+    border-radius: 10px;
+    font-size: 1.05rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: transform 0.15s, box-shadow 0.15s;
+    box-shadow: 0 4px 12px rgba(255, 167, 38, 0.35);
+}
+
+.auth-submit:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 16px rgba(255, 167, 38, 0.45);
+}
+
+.auth-submit:active:not(:disabled) {
+    transform: translateY(0);
+}
+
+.auth-submit:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.auth-error {
+    margin-top: 16px;
+    padding: 12px 14px;
+    background: rgba(255, 80, 80, 0.08);
+    border: 1px solid rgba(255, 80, 80, 0.3);
+    color: #b32424;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    text-align: left;
+}
+
+.auth-loading {
+    margin-top: 16px;
+    color: #d4a017;
+    font-size: 0.95rem;
+    text-align: center;
+}
+
+.auth-hint {
+    margin-top: 20px;
+    font-size: 0.8rem;
+    color: #999;
+    text-align: center;
+    line-height: 1.5;
+}
+
+/* 退出登录按钮（开始界面） */
+#btn-logout {
+    background: #f5e6c8;
+    color: #6b4e16;
+}
+#btn-logout:hover {
+    background: #ffd54a;
+    color: #6b4e16;
+}
+
+@media (max-width: 480px) {
+    .auth-container {
+        padding: 28px 22px;
+    }
+
+    .auth-title {
+        font-size: 1.8rem;
+    }
 }

@@ -36,14 +36,29 @@ async function main() {
 
     console.log('📡 打开页面…');
     await page.goto(URL, { waitUntil: 'networkidle' });
-    await page.waitForSelector('#start-screen.active');
+
+    // task #36：先注册一个测试账号过 auth-screen
+    await page.waitForSelector('#auth-screen.active', { timeout: 5000 });
+    const username = `lib_${Date.now().toString(36)}`;
+    await page.locator('#auth-tab-register').click();
+    await page.waitForTimeout(200);
+    await page.locator('#auth-register-username').fill(username);
+    await page.locator('#auth-register-password').fill('test123456');
+    await page.locator('#auth-register-password-confirm').fill('test123456');
+    await page.locator('#auth-form-register button[type="submit"]').click();
+    await page.waitForSelector('#start-screen.active', { timeout: 15000 });
 
     // 清空所有相关 localStorage
     await page.evaluate(() => {
         localStorage.clear();
     });
     await page.reload({ waitUntil: 'networkidle' });
-    await page.waitForSelector('#start-screen.active');
+    // 重新登录（reload 后 auth-screen 又出现）
+    await page.waitForSelector('#auth-screen.active', { timeout: 5000 });
+    await page.locator('#auth-login-username').fill(username);
+    await page.locator('#auth-login-password').fill('test123456');
+    await page.locator('#auth-form-login button[type="submit"]').click();
+    await page.waitForSelector('#start-screen.active', { timeout: 15000 });
 
     // ============================================================
     // 1. 词库管理界面：默认词库 + 新建
@@ -133,19 +148,19 @@ async function main() {
     await page.waitForSelector('#users-screen.active');
     await page.waitForTimeout(200);
 
-    // 自动有 1 个用户（迁移自 wordGameCurrentPlayer 或没有）
+    // task #36：注册时自动建 1 个默认 profile（与 username 同名）
     let userCount = await page.evaluate(() => window.usersManager.listUsers().length);
-    assert('T9: 初始用户数 = 0（无历史）', userCount === 0, `count=${userCount}`);
+    assert('T9: 初始用户数 = 1（注册时默认 profile）', userCount === 1, `count=${userCount}`);
 
     // 新建 Alice
     await page.click('#btn-create-user');
     await page.waitForSelector('#name-input-modal.active');
     await page.fill('#player-name-input', 'Alice');
     await page.click('#btn-confirm-name');
-    await page.waitForTimeout(200);
+    await page.waitForTimeout(500);  // 等服务器创建
 
     userCount = await page.evaluate(() => window.usersManager.listUsers().length);
-    assert('T10: 创建后用户数 = 1', userCount === 1);
+    assert('T10: 创建后用户数 = 2', userCount === 2, `count=${userCount}`);
 
     let currentUser = await page.evaluate(() => ({
         id: window.usersManager.getCurrentUserId(),
@@ -158,10 +173,10 @@ async function main() {
     await page.waitForSelector('#name-input-modal.active');
     await page.fill('#player-name-input', 'Bob');
     await page.click('#btn-confirm-name');
-    await page.waitForTimeout(200);
+    await page.waitForTimeout(500);
 
     userCount = await page.evaluate(() => window.usersManager.listUsers().length);
-    assert('T12: 创建 Bob 后用户数 = 2', userCount === 2);
+    assert('T12: 创建 Bob 后用户数 = 3', userCount === 3, `count=${userCount}`);
 
     // ============================================================
     // 4. 错词按用户 × 词库分桶
@@ -169,7 +184,7 @@ async function main() {
     await page.evaluate(() => {
         // Alice 在 default 词库加 2 个错词
         window.librariesManager.setCurrentLibrary('default');
-        window.usersManager.switchUser(window.usersManager.listUsers().find(u => u.name === 'Alice').id);
+        window.usersManager.switchUser(window.usersManager.listUsers().find(u => u.nickname === 'Alice').id);
         window.librariesManager.saveMissedWord('default', {
             word: 'apple', meaning: '苹果', difficulty: 1,
         });
@@ -178,14 +193,14 @@ async function main() {
         });
 
         // Bob 在 default 词库加 1 个不同的错词
-        window.usersManager.switchUser(window.usersManager.listUsers().find(u => u.name === 'Bob').id);
+        window.usersManager.switchUser(window.usersManager.listUsers().find(u => u.nickname === 'Bob').id);
         window.librariesManager.saveMissedWord('default', {
             word: 'cat', meaning: '猫', difficulty: 1,
         });
     });
 
     let aliceMissed = await page.evaluate(() => {
-        const aliceId = window.usersManager.listUsers().find(u => u.name === 'Alice').id;
+        const aliceId = window.usersManager.listUsers().find(u => u.nickname === 'Alice').id;
         window.usersManager.switchUser(aliceId);
         return window.librariesManager.getMissedWords('default').map(m => m.word);
     });
@@ -194,7 +209,7 @@ async function main() {
         JSON.stringify(aliceMissed));
 
     let bobMissed = await page.evaluate(() => {
-        const bobId = window.usersManager.listUsers().find(u => u.name === 'Bob').id;
+        const bobId = window.usersManager.listUsers().find(u => u.nickname === 'Bob').id;
         window.usersManager.switchUser(bobId);
         return window.librariesManager.getMissedWords('default').map(m => m.word);
     });
@@ -234,7 +249,7 @@ async function main() {
     // 7. 删除用户清理进度
     // ============================================================
     let progressKey = await page.evaluate(() => {
-        const aliceId = window.usersManager.listUsers().find(u => u.name === 'Alice').id;
+        const aliceId = window.usersManager.listUsers().find(u => u.nickname === 'Alice').id;
         window.usersManager.switchUser(aliceId);
         // 触发一次进度写入（模拟 Alice 完成第 1 关）
         window.wordManager.progressData = { completedLevels: [1], highScores: {1: 100}, missedWords: [], missedWordHits: {} };
@@ -245,7 +260,7 @@ async function main() {
     assert('T18: Alice 的进度已存', hasProgress === true);
 
     await page.evaluate(() => {
-        const aliceId = window.usersManager.listUsers().find(u => u.name === 'Alice').id;
+        const aliceId = window.usersManager.listUsers().find(u => u.nickname === 'Alice').id;
         window.usersManager.deleteUser(aliceId);
     });
 
@@ -255,10 +270,15 @@ async function main() {
     // ============================================================
     // 8. 重复名字不允许
     // ============================================================
-    let dupResult = await page.evaluate(() => {
-        return window.usersManager.createUser('Bob');  // 已存在
+    let dupResult = await page.evaluate(async () => {
+        try {
+            await window.usersManager.createUser('Bob');  // 已存在
+            return { created: true };
+        } catch (e) {
+            return { error: e.message };
+        }
     });
-    assert('T20: 重复用户名不允许', dupResult === null);
+    assert('T20: 重复用户名不允许', dupResult.error && dupResult.error.includes('已存在'), JSON.stringify(dupResult));
 
     // ============================================================
     // 页面无错误

@@ -48,11 +48,32 @@ class Game {
             await new Promise(resolve => document.addEventListener('DOMContentLoaded', resolve));
         }
 
-        // 初始化各个管理器
+        // ★ task #36：先初始化 authManager（强制清理老游客数据 + 验证 token）
+        const backendUrl = (window.MINIMAX_CONFIG && window.MINIMAX_CONFIG.backendUrl) || 'http://127.0.0.1:8765';
+        const authState = await authManager.init(backendUrl);
+
+        // 缓存DOM元素
+        this.cacheElements();
+
+        // ★ 未登录 → 直接跳到 auth-screen，不进游戏（不跑 bindEvents/管理器初始化）
+        if (!authState.loggedIn) {
+            this._setupAuthScreen();
+            this.showScreen('auth-screen');
+            return;
+        }
+
+        // 已登录：先建好各管理器实例
         this.soundManager = window.soundManager || new SoundManager();
         this.animationPlayer = window.animationPlayer || new AnimationPlayer();
         this.wordManager = window.wordManager || new WordManager();
         this.collisionDetector = window.collisionDetector || new CollisionDetector();
+        this.gamepadController = window.gamepadController;
+
+        // 同步 profiles 到 usersManager
+        usersManager.setProfiles(authManager.profiles);
+
+        // 设置事件监听（依赖各管理器实例）
+        this.bindEvents();
 
         // 初始化音效和动画播放器
         await this.soundManager.init();
@@ -65,12 +86,6 @@ class Game {
 
         // 加载词库
         await this.wordManager.loadWords();
-
-        // 缓存DOM元素
-        this.cacheElements();
-
-        // 设置事件监听
-        this.bindEvents();
 
         // 显示初始界面
         this.showScreen('start-screen');
@@ -92,6 +107,7 @@ class Game {
             'vocab-screen': document.getElementById('vocab-screen'),
             'users-screen': document.getElementById('users-screen'),
             'import-screen': document.getElementById('import-screen'),
+            'auth-screen': document.getElementById('auth-screen'),
         };
 
         this.elements = {
@@ -110,6 +126,90 @@ class Game {
         };
     }
 
+    /** task #36：注册 auth-screen 的 tab + 表单事件 */
+    _setupAuthScreen() {
+        const tabLogin = document.getElementById('auth-tab-login');
+        const tabRegister = document.getElementById('auth-tab-register');
+        const formLogin = document.getElementById('auth-form-login');
+        const formRegister = document.getElementById('auth-form-register');
+        const errEl = document.getElementById('auth-error');
+        const loadingEl = document.getElementById('auth-loading');
+
+        const showError = (msg) => {
+            if (!errEl) return;
+            errEl.textContent = msg || '';
+            errEl.hidden = !msg;
+        };
+        const setLoading = (on) => {
+            if (loadingEl) loadingEl.hidden = !on;
+            formLogin.querySelector('button[type=submit]').disabled = !!on;
+            formRegister.querySelector('button[type=submit]').disabled = !!on;
+        };
+
+        const switchTab = (tab) => {
+            const isLogin = tab === 'login';
+            tabLogin.classList.toggle('active', isLogin);
+            tabRegister.classList.toggle('active', !isLogin);
+            formLogin.hidden = !isLogin;
+            formRegister.hidden = isLogin;
+            showError('');
+        };
+        tabLogin?.addEventListener('click', () => switchTab('login'));
+        tabRegister?.addEventListener('click', () => switchTab('register'));
+
+        const handleSuccess = async (resp) => {
+            authManager._saveSession(resp);
+            usersManager.setProfiles([resp.profile]);
+            // 重启游戏（重新初始化游戏管理器）
+            location.reload();
+        };
+
+        formLogin?.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            showError('');
+            const username = document.getElementById('auth-login-username').value.trim();
+            const password = document.getElementById('auth-login-password').value;
+            if (!username || !password) return;
+            setLoading(true);
+            try {
+                const resp = await authManager.login(username, password);
+                await handleSuccess(resp);
+            } catch (err) {
+                showError(err.message || '登录失败');
+                setLoading(false);
+            }
+        });
+
+        formRegister?.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            showError('');
+            const username = document.getElementById('auth-register-username').value.trim();
+            const password = document.getElementById('auth-register-password').value;
+            const confirm = document.getElementById('auth-register-password-confirm').value;
+            if (!username || !password) return;
+            if (password !== confirm) {
+                showError('两次密码不一致');
+                return;
+            }
+            setLoading(true);
+            try {
+                const resp = await authManager.register(username, password);
+                await handleSuccess(resp);
+            } catch (err) {
+                showError(err.message || '注册失败');
+                setLoading(false);
+            }
+        });
+    }
+
+    /** task #36：登出后跳到 auth-screen */
+    async logout() {
+        if (!confirm('确定要退出登录吗？进度已自动保存到服务器。')) return;
+        authManager.logout();
+        usersManager.setProfiles([]);
+        location.reload();
+    }
+
     bindEvents() {
         // 主菜单按钮
         document.getElementById('btn-start')?.addEventListener('click', () => this.requestNameThenStart(1));
@@ -126,6 +226,7 @@ class Game {
         document.getElementById('btn-users')?.addEventListener('click', () => this.showUsersManager());
         document.getElementById('btn-import')?.addEventListener('click', () => this.showImport());
         document.getElementById('btn-edit-library-name')?.addEventListener('click', () => this.editCurrentLibraryName());
+        document.getElementById('btn-logout')?.addEventListener('click', () => this.logout());
 
         // 返回按钮
         document.getElementById('btn-back-from-levels')?.addEventListener('click', () => this.showScreen('start-screen'));
@@ -1996,19 +2097,26 @@ class Game {
 
     async createUserPrompt() {
         const result = await this._promptForText({
-            title: '新建用户',
+            title: '新建玩家',
             label: '昵称',
             placeholder: '例如：Alice / 儿子',
             maxLength: 20,
         });
         if (!result) return;
-        const user = usersManager.createUser(result);
-        if (!user) {
-            this.showMessage('创建失败（名字为空或已存在）');
-            return;
+        try {
+            const user = await usersManager.createUser(result);
+            if (!user) {
+                this.showMessage('创建失败（名字为空或已存在）');
+                return;
+            }
+            // 切到新档案
+            await usersManager.switchUser(user.id);
+            this.renderUserList();
+            this.updateCurrentPlayerDisplay();
+            this.showMessage(`已创建并切换到「${user.name}」`);
+        } catch (e) {
+            this.showMessage(`创建失败：${e.message || e}`);
         }
-        this.renderUserList();
-        this.showMessage(`已创建「${user.name}」`);
     }
 
     async renameUserPrompt(userId) {
@@ -2060,16 +2168,15 @@ class Game {
         if (statusEl) {
             statusEl.innerHTML = `
                 <div class="import-hint">
-                    📌 上传 MP3 / PDF / TXT / DOCX 文件，系统自动提取英语单词并加入「${librariesManager.getCurrentLibrary()?.name || ''}」。
+                    📌 上传 TXT / PDF / DOCX 文件，系统自动提取英语单词 + 查中文释义 + 加入「${librariesManager.getCurrentLibrary()?.name || ''}」+ 生成音频。
                     <br><br>
-                    <strong>当前状态：</strong>
+                    <strong>当前支持：</strong>
                     <ul>
-                        <li>前端 UI：✅ 完成</li>
-                        <li>后端 API：⏳ 调研中（后台任务 <code>wnsvi6v39</code>）</li>
-                        <li>完整 pipeline：⏳ 等 M4</li>
+                        <li>✅ TXT（推荐，纯英文文本）</li>
+                        <li>✅ PDF / DOCX（自动转文本）</li>
+                        <li>⏳ MP3 / 图片（等 ASR/OCR 选型）</li>
                     </ul>
-                    <br>
-                    您可以先选择文件预览，导入按钮在 API 就绪后启用。
+                    处理在后台进行，可关闭页面稍后查看进度。
                 </div>
             `;
         }
@@ -2098,7 +2205,10 @@ class Game {
             dropZone.dataset.bound = '1';
         }
         const submitBtn = document.getElementById('btn-import-submit');
-        if (submitBtn) submitBtn.disabled = true;        // 后端未就绪
+        if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.onclick = () => this.uploadFile();
+        }
 
         this.showScreen('import-screen');
     }
@@ -2114,6 +2224,175 @@ class Game {
             <div>类型：${this._escapeHtml(file.type || '未知')}</div>
             <div>大小：${sizeMB} MB</div>
         `;
+        // 自动启用提交按钮
+        const submitBtn = document.getElementById('btn-import-submit');
+        if (submitBtn) submitBtn.disabled = false;
+    }
+
+    /**
+     * ★ 上传文件到后端 → 触发 5 步 pipeline → 轮询 job 状态
+     */
+    async uploadFile() {
+        const fileInput = document.getElementById('import-file-input');
+        const file = fileInput?.files[0];
+        if (!file) {
+            this._showImportError('请先选择文件');
+            return;
+        }
+
+        const lib = (typeof librariesManager !== 'undefined') ? librariesManager.getCurrentLibrary() : null;
+        if (!lib) {
+            this._showImportError('请先选择目标词库');
+            return;
+        }
+
+        const user = (typeof usersManager !== 'undefined') ? usersManager.getCurrentUser() : null;
+        if (!user) {
+            this._showImportError('请先选择用户');
+            return;
+        }
+
+        const submitBtn = document.getElementById('btn-import-submit');
+        if (submitBtn) {
+            submitBtn.disabled = true;
+            submitBtn.textContent = '⏳ 上传中...';
+        }
+
+        const backendUrl = (typeof window !== 'undefined' && window.MINIMAX_CONFIG?.backendUrl)
+            || 'http://127.0.0.1:8765';
+
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('user_id', user.id);
+        formData.append('target_library_id', lib.id);
+
+        let jobId;
+        try {
+            const resp = await fetch(`${backendUrl}/api/upload`, {
+                method: 'POST',
+                body: formData,
+                headers: authManager.getAuthHeaders(),
+            });
+            if (!resp.ok) {
+                const err = await resp.json().catch(() => ({ detail: resp.statusText }));
+                throw new Error(err.detail || `HTTP ${resp.status}`);
+            }
+            const job = await resp.json();
+            jobId = job.id;
+            this._showImportStatus(`✅ 上传成功！Job ID: ${jobId.slice(0, 8)}... 正在后台处理...`, 'info');
+        } catch (e) {
+            this._showImportError(`上传失败：${e.message}（后端是否在 ${backendUrl} 启动？）`);
+            if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.textContent = '🚀 开始导入';
+            }
+            return;
+        }
+
+        // 轮询 job 状态
+        this._pollJobStatus(jobId, lib.id);
+    }
+
+    async _pollJobStatus(jobId, libraryId) {
+        const backendUrl = (typeof window !== 'undefined' && window.MINIMAX_CONFIG?.backendUrl)
+            || 'http://127.0.0.1:8765';
+        const STAGE_NAMES = {
+            'text_extract': '📄 提取文本',
+            'lemma': '🔍 提取单词',
+            'tts': '🔊 生成音频',
+            'done': '✅ 完成',
+        };
+        let attempts = 0;
+        const maxAttempts = 60;  // 60 * 2s = 2 min max
+
+        const poll = async () => {
+            attempts++;
+            try {
+                const resp = await fetch(`${backendUrl}/api/jobs/${jobId}`, {
+                    headers: authManager.getAuthHeaders(),
+                });
+                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+                const job = await resp.json();
+                const stage = STAGE_NAMES[job.current_stage] || job.current_stage || '准备中...';
+                const progress = job.progress || 0;
+                const statusText = job.status === 'completed' ? '✅ 完成'
+                                : job.status === 'failed' ? '❌ 失败'
+                                : `⏳ ${stage}（${progress}%）`;
+
+                const result = job.result || {};
+                let detail = '';
+                if (result.extracted_count !== undefined) {
+                    detail += `<br>提取单词：<strong>${result.extracted_count}</strong>`;
+                }
+                if (result.known_count !== undefined) {
+                    detail += `<br>已识别：<strong>${result.known_count}</strong> / 未识别：<strong>${result.unknown_count || 0}</strong>`;
+                }
+                if (result.added_count !== undefined) {
+                    detail += `<br>加入词库：<strong>${result.added_count}</strong>`;
+                }
+                if (result.tts_generated !== undefined) {
+                    detail += `<br>生成音频：<strong>${result.tts_generated}</strong>`;
+                }
+                if (job.error_message) {
+                    detail += `<br><span style="color:#c00">错误：${this._escapeHtml(job.error_message)}</span>`;
+                }
+
+                this._showImportStatus(`
+                    <div class="import-status-block">
+                        <div class="import-status-main">${statusText}</div>
+                        <div class="import-progress-bar"><div class="import-progress-fill" style="width:${progress}%"></div></div>
+                        <div class="import-status-detail">${detail}</div>
+                    </div>
+                `, 'info');
+
+                if (job.status === 'completed') {
+                    this._onImportCompleted(libraryId);
+                    return;
+                }
+                if (job.status === 'failed') {
+                    this._showImportError(`处理失败：${job.error_message || '未知错误'}`);
+                    return;
+                }
+                if (attempts >= maxAttempts) {
+                    this._showImportError('处理超时，请稍后手动刷新');
+                    return;
+                }
+                setTimeout(poll, 2000);
+            } catch (e) {
+                this._showImportError(`查询进度失败：${e.message}`);
+            }
+        };
+
+        poll();
+    }
+
+    _onImportCompleted(libraryId) {
+        const submitBtn = document.getElementById('btn-import-submit');
+        if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.textContent = '🚀 导入更多';
+        }
+        // 刷新当前词库的单词列表
+        if (typeof librariesManager !== 'undefined') {
+            librariesManager.refreshLibrary(libraryId).then(() => {
+                console.log('[import] 词库已刷新');
+            });
+        }
+    }
+
+    _showImportStatus(html, type = 'info') {
+        const el = document.getElementById('import-status');
+        if (!el) return;
+        el.innerHTML = `<div class="import-status-${type}">${html}</div>`;
+    }
+
+    _showImportError(msg) {
+        this._showImportStatus(`<div style="color:#c00">❌ ${this._escapeHtml(msg)}</div>`, 'error');
+        const submitBtn = document.getElementById('btn-import-submit');
+        if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.textContent = '🚀 开始导入';
+        }
     }
 
     // ============================================================

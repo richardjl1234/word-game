@@ -40,7 +40,15 @@ async function main() {
 
     console.log('📡 打开页面…');
     await page.goto(URL, { waitUntil: 'networkidle' });
-    await page.waitForSelector('#start-screen.active');
+    // task #36：先注册一个测试账号过 auth-screen
+    await page.waitForSelector('#auth-screen.active', { timeout: 5000 });
+    const username = `focus_${Date.now().toString(36)}`;
+    await page.locator('#auth-tab-register').click();
+    await page.locator('#auth-register-username').fill(username);
+    await page.locator('#auth-register-password').fill('test123456');
+    await page.locator('#auth-register-password-confirm').fill('test123456');
+    await page.locator('#auth-form-register button[type="submit"]').click();
+    await page.waitForSelector('#start-screen.active', { timeout: 15000 });
     await page.waitForFunction(() => window.game, { timeout: 5000 }).catch(() => {});
 
     // ===== 1. 进入游戏（关卡 1）=====

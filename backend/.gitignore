@@ -1,0 +1,38 @@
+# 凭据和本地配置
+.env
+.env.local
+*.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+
+# 测试
+.pytest_cache/
+.coverage
+htmlcov/
+*.egg-info/
+
+# 上传文件（测试用临时文件）
+test_uploads/
+uploads/
+
+# 本地 SQLite（含注册账号的 bcrypt 密码 hash，禁止提交）
+*.db
+*.sqlite
+*.sqlite3
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# 操作系统
+.DS_Store
+Thumbs.db

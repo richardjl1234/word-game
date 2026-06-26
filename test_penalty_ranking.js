@@ -37,56 +37,60 @@ async function main() {
 
     console.log('📡 打开页面…');
     await page.goto(URL, { waitUntil: 'networkidle' });
-    await page.waitForSelector('#start-screen.active');
+    // task #36：先注册一个测试账号过 auth-screen
+    await page.waitForSelector('#auth-screen.active', { timeout: 5000 });
+    const username = `pen_${Date.now().toString(36)}`;
+    await page.locator('#auth-tab-register').click();
+    await page.locator('#auth-register-username').fill(username);
+    await page.locator('#auth-register-password').fill('test123456');
+    await page.locator('#auth-register-password-confirm').fill('test123456');
+    await page.locator('#auth-form-register button[type="submit"]').click();
+    await page.waitForSelector('#start-screen.active', { timeout: 15000 });
     await page.waitForFunction(() => window.game && window.game.init, { timeout: 5000 }).catch(() => {});
 
-    // 清空 localStorage（避免上次测试残留）
+    // 清空排行榜（避免上次测试残留）
     await page.evaluate(() => {
         localStorage.removeItem('wordGameRanking');
-        localStorage.removeItem('wordGameCurrentPlayer');
     });
-    await page.reload({ waitUntil: 'networkidle' });
-    await page.waitForSelector('#start-screen.active');
 
-    // ===== 1. 当前玩家默认显示"未设置" =====
+    // ===== 1. 当前玩家默认显示注册时创建的 profile =====
     let playerName = await page.textContent('#current-player-name');
-    assert('T1: 初始"当前玩家"显示"未设置"', playerName === '未设置', `got "${playerName}"`);
+    assert('T1: 初始"当前玩家"显示注册时创建的 profile', playerName && playerName !== '未设置', `got "${playerName}"`);
 
-    // ===== 2. 点击"开始游戏" → 弹姓名 modal =====
+    // ===== 2. 点击"开始游戏" → 不再弹 modal（已有 profile）=====
     await page.click('#btn-start');
-    await page.waitForTimeout(200);
+    await page.waitForTimeout(500);
     let modalVisible = await page.evaluate(() => document.getElementById('name-input-modal').classList.contains('active'));
-    assert('T2: 点击开始游戏弹出姓名 modal', modalVisible === true);
+    let currentScreen = await page.evaluate(() => window.game.currentScreen);
+    assert('T2: 已有 profile 时点击开始游戏直接进游戏', !modalVisible && currentScreen === 'game-screen',
+        `modal=${modalVisible} screen=${currentScreen}`);
 
-    // ===== 3. 不输入名字 → 不能关闭 =====
-    await page.click('#btn-confirm-name');
+    // ===== 3. 关掉游戏回到 start-screen =====
+    await page.evaluate(() => window.game.showScreen('start-screen'));
     await page.waitForTimeout(200);
-    modalVisible = await page.evaluate(() => document.getElementById('name-input-modal').classList.contains('active'));
-    assert('T3: 空名字不允许确认', modalVisible === true);
 
-    // ===== 4. 取消按钮 → modal 关闭、不进入游戏 =====
+    // ===== 4. 通过修改玩家名字按钮修改昵称 =====
+    await page.click('#btn-edit-name');
+    await page.waitForTimeout(300);
+    let editModalVisible = await page.evaluate(() => document.getElementById('name-input-modal').classList.contains('active'));
+    assert('T4: 修改名字弹 modal', editModalVisible === true);
+
+    // ===== 5. 取消修改 =====
     await page.click('#btn-cancel-name');
     await page.waitForTimeout(200);
-    modalVisible = await page.evaluate(() => document.getElementById('name-input-modal').classList.contains('active'));
-    let currentScreen = await page.evaluate(() => window.game.currentScreen);
-    assert('T4: 取消后 modal 关闭', modalVisible === false);
-    assert('T4a: 取消后仍在 start-screen', currentScreen === 'start-screen', `got ${currentScreen}`);
-
-    // ===== 5. 输入名字 → 确认 → 进入游戏 =====
-    await page.click('#btn-start');
-    await page.waitForTimeout(200);
-    await page.fill('#player-name-input', '测试玩家A');
-    await page.click('#btn-confirm-name');
-    await page.waitForTimeout(300);
+    editModalVisible = await page.evaluate(() => document.getElementById('name-input-modal').classList.contains('active'));
     currentScreen = await page.evaluate(() => window.game.currentScreen);
-    assert('T5: 输入名字并确认后进入游戏', currentScreen === 'game-screen', `got ${currentScreen}`);
+    assert('T5: 取消后 modal 关闭', editModalVisible === false);
+    assert('T5a: 取消后仍在 start-screen', currentScreen === 'start-screen', `got ${currentScreen}`);
+
+    // ===== 5. 重新开始（回到 start-screen 后再点开始）=====
+    await page.click('#btn-start');
+    await page.waitForTimeout(500);
+    currentScreen = await page.evaluate(() => window.game.currentScreen);
+    assert('T5: 重新点开始后进入游戏', currentScreen === 'game-screen', `got ${currentScreen}`);
 
     playerName = await page.textContent('#current-player-name');
-    assert('T5a: "当前玩家"显示已设置名字', playerName === '测试玩家A', `got "${playerName}"`);
-
-    // localStorage 应该保存了玩家名
-    const storedPlayer = await page.evaluate(() => localStorage.getItem('wordGameCurrentPlayer'));
-    assert('T5b: localStorage 存储了玩家名', storedPlayer === '测试玩家A', `got "${storedPlayer}"`);
+    assert('T5a: "当前玩家"显示当前 profile', !!playerName && playerName !== '未设置', `got "${playerName}"`);
 
     // ===== 6. 累进扣分测试 =====
     // 等游戏初始化完成
@@ -188,10 +192,15 @@ async function main() {
     const list = await page.evaluate(() => window.game.loadRanking());
     assert('T9: 排行榜上限 = 10', list.length === 10, `got ${list.length}`);
 
-    // ===== 10. 修改名字 =====
-    await page.evaluate(() => window.game.setCurrentPlayer('新名字'));
+    // ===== 10. 切换 profile 更新显示（task #36：通过 authManager）=====
+    await page.evaluate(async () => {
+        // 创建新 profile 并切换
+        const p = await window.authManager.createProfile('切换测试');
+        await window.authManager.switchProfile(p.id);
+    });
+    await page.waitForTimeout(300);
     playerName = await page.textContent('#current-player-name');
-    assert('T10: setCurrentPlayer 更新显示', playerName === '新名字', `got "${playerName}"`);
+    assert('T10: 切换 profile 后"当前玩家"显示更新', playerName === '切换测试', `got "${playerName}"`);
 
     // ===== 11. 截图 =====
     await page.evaluate(() => {

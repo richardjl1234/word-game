@@ -9,6 +9,7 @@
 window.MINIMAX_CONFIG = {
   apiKey: '',
   groupId: '',
+  backendUrl: 'http://127.0.0.1:8765',  // ★ 后端 API 地址（导入词库、上传文件等功能）
 
   tts: {
     // MiniMax 语音模型（speech-2.8-hd 高清版）

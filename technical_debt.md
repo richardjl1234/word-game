@@ -127,3 +127,177 @@ assert('T5: focusableButtons 数量=11', focusableButtons.length === 11, `got ${
 ```bash
 node test_gamepad_settings.js  # T5, T15, T16 失败；其他测试通过
 ```
+## TD-003: 后端 conftest.py 的 lifespan monkeypatch 比较 hacky
+
+### 现状
+FastAPI lifespan 会调用 `init_db()` 和 `init_storage()`，如果不 patch 就会用 prod 配置覆盖测试用的 sqlite 内存库和 LocalStorage fixture。当前用 4 层 monkeypatch 短路：
+- `app.database.init_db → noop`
+- `app.main.init_db → noop`
+- `app.main.S3Storage / LocalStorage → 返回 conftest 的 storage`
+- `app.main.app.router.lifespan_context → noop_lifespan`
+
+### 根因
+FastAPI lifespan 当前假设开发环境（init_db 自动建表 + LocalStorage 兜底），与 pytest 完全独立的 fixture 体系有冲突。
+
+### 影响
+- 测试能跑通（29 passed）
+- 但 conftest 的 monkeypatch 层数多，未来加新初始化代码容易漏 patch
+
+### 已尝试方案
+- 方案 A：把 init_db / init_storage 从 lifespan 移到 startup event（不变）
+- 方案 B：让 lifespan 检查环境变量 `TESTING=1` 时跳过初始化（更优雅）
+- 方案 C：直接给 FastAPI app 传一个 noop lifespan（已采用 hack 版）
+
+### 未来修复方向
+**优先级：中**
+
+采用方案 B：lifespan 检查 `settings.TESTING`，True 时跳过所有副作用。
+```python
+if not settings.TESTING:
+    init_db()
+    init_storage(...)
+```
+
+### 验证
+```bash
+cd backend && ../venv/bin/python -m pytest tests/ -v
+# 当前 29 passed, 1 skipped
+```
+
+---
+
+## TD-004: CSS 大括号不平衡 → 后半文件所有规则被丢弃
+
+### 现状
+`game/css/style.css` 第 1535 行 `@media (max-width: 768px) {` 块**少了闭合的 `}`**，行 1592 的 `}` 实际关闭的是嵌套的 `@media (max-width: 480px)`。结果：
+- 文件 `{` 比 `}` 多 1 → 浏览器解析到 1535 行后把所有后续规则当作 `@media (max-width: 768px)` 的内容
+- 桌面端（视口 > 768px）→ 整个 .import / .vocab / .users / .btn-small 等 ~700 行 CSS **全部不生效**
+- 用户表现：进入"导入词库"页面只能看到说明文字，看不到 drop zone（被压成 44px 一条线），以为按钮"没反应"
+
+### 根因
+2026-06-26 编辑 `@media (max-width: 768px)` 内部嵌套 `@media (max-width: 480px)` 时，删除外层规则后**误删了外层 `}`**，又没有工具校验大括号平衡。Python `cssutils` 在解析时直接静默丢弃整个 stylesheet 后半。
+
+### 影响
+- **所有新加的多词库 / 多用户 / 文件导入 CSS 在桌面端完全失效**（修复前）
+- 视觉表现：start-screen 上的新按钮、词库卡片、用户卡片、导入 drop zone 等组件样式丢失
+- 玩家实际操作功能正常（JS 不依赖 CSS），但 UI 看起来"很丑" / "按钮没反应"
+
+### 已尝试方案
+1. 在 Playwright 里 `getComputedStyle` 检查 → 发现所有 .import-*.{padding, min-height, display} 都是 0 / none
+2. Python 数大括号 → diff=1 → 定位到 1535 行的 `@media (max-width: 768px)`
+3. 在 1592 行后补 `}` → diff=0 → 所有规则重新生效
+
+### 未来修复方向
+**优先级：中**
+
+加 CSS lint 到 CI：
+```bash
+# install
+pip install cssutils
+# pre-commit
+python -c "
+import cssutils, sys
+sheet = cssutils.parseFile('game/css/style.css')
+if len(sheet.cssRules) < 600:
+    sys.exit(f'CSS 解析异常（只解析出 {len(sheet.cssRules)} 条规则，正常应 > 600），可能有大括号不平衡')
+"
+```
+
+或者用 stylelint：
+```bash
+npx stylelint "game/css/**/*.css" --config='{"rules":{"block-closing-brace-space-before":"always"}}'
+```
+
+### 验证
+```bash
+python3 -c "
+import re
+with open('game/css/style.css') as f:
+    css = re.sub(r'/\*.*?\*/', '', f.read(), flags=re.DOTALL)
+o, c = css.count('{'), css.count('}')
+print(f'open={o} close={c} diff={o-c}')  # 必须 diff=0
+"
+node test_e2e_ingest.js  # 15/15 通过
+```
+
+---
+
+## TD-005: JWT_SECRET 默认值风险（task #36）
+
+### 现状
+`backend/app/config.py:69` 有 `JWT_SECRET: str = "dev-only-CHANGE-ME-in-production"` 默认值。
+无 `.env` 文件时启动会用默认值，所有 dev 环境的 JWT 可被伪造。
+
+### 根因
+历史原因：开发阶段方便快速跑通。生产部署文档没强制要求环境变量。
+
+### 影响
+- 仅 dev/local 影响（生产部署流程会 export）
+- 当前 `./start.sh backend` 启动时未检测/警告 JWT_SECRET 仍是默认值
+
+### 已尝试方案
+无
+
+### 未来修复方向
+1. `start.sh` 启动后端时检测 `JWT_SECRET` 环境变量，若仍是 dev-only 默认值则打 ⚠️ warning
+2. CI 跑 pytest 时强制覆盖（monkeypatch）
+3. 文档强制要求 `export JWT_SECRET=$(openssl rand -hex 32)`
+
+### 优先级
+低（dev only，无生产部署）
+
+---
+
+## TD-006: 数据库无 Alembic 迁移（task #36 加 account_id 字段后）
+
+### 现状
+2026/06/26 添加 Account/PlayerProfile 表 + Library.account_id/player_id 列后，
+**已有 dev db 文件不会自动加列**。症状：所有 API 返回 500 / sqlite "no such column: libraries.account_id"。
+
+### 根因
+`backend/app/main.py` 用 `Base.metadata.create_all(engine)`，只在表不存在时建表，不会 ALTER。
+
+### 影响
+- 每次改 model 都得 `rm /tmp/wordgame-backend.db && 重启`（dev 环境）
+- 生产环境部署后改 model 同样会爆
+
+### 已尝试方案
+- 删 db + 重启（当前 workaround）
+
+### 未来修复方向
+- 引入 Alembic，每次 model 变更写一个 migration
+- 短期：写个 `migrate.py` 脚本扫描老 db 缺哪些列，自动 ALTER TABLE ADD COLUMN
+
+### 优先级
+中（开发体验差，但能 work；生产部署前必须解决）
+
+---
+
+## TD-007: librariesManager 未完全联调后端（task #42 部分完成）
+
+### 现状
+`game/js/librariesManager.js` 仍是 localStorage-only。前端 `authManager` 已支持 JWT，
+但 `librariesManager` 的 CRUD（createLibrary/renameLibrary/deleteLibrary/addWords）
+**只写 localStorage，不调 `/api/libraries`**。
+
+### 根因
+时间约束 + 用户首要需求是 auth（已完成）。词库功能虽用了 backend API（uploader pipeline 会写），
+但前端管理界面未对接后端的增删改查。
+
+### 影响
+- 多设备同步：用户登录后看到的词库是 localStorage 缓存（来自老游客数据），
+  不会自动从后端拉取
+- 创建/删除/重命名词库不会同步到后端
+- 同一账号在两台设备操作可能数据不一致
+
+### 已尝试方案
+无
+
+### 未来修复方向
+1. `librariesManager.init()` 改成 `await fetch('/api/libraries', { headers: authManager.getAuthHeaders() })`
+2. 写操作（create/rename/delete/addWords）改为先调后端 API，失败时再降级 localStorage
+3. 添加 E2E：登录 → 创词库 → 退出 → 重登 → 词库仍存在
+
+### 优先级
+中（不阻塞核心玩法，但跨设备体验差）
+

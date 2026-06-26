@@ -1,0 +1,45 @@
+# Web framework
+fastapi==0.115.6
+uvicorn[standard]==0.32.1
+python-multipart==0.0.20
+pydantic==2.10.4
+pydantic-settings==2.7.0
+
+# Database
+sqlalchemy==2.0.36
+alembic==1.14.0
+psycopg2-binary==2.9.10
+aiosqlite==0.20.0       # 测试用 sqlite 异步驱动
+
+# Task queue
+celery[redis]==5.4.0
+redis==5.2.1
+
+# S3-compatible storage
+boto3==1.35.81
+minio==7.2.12            # 本地开发用 MinIO
+
+# File parsing (task #16)
+pdfplumber==0.11.4
+python-docx==1.1.2
+
+# NLP — lemma (task #18)
+spacy==3.8.3
+# en_core_web_sm 模型（首次使用前需要下载，~12MB）
+
+# Test
+pytest==8.3.4
+pytest-asyncio==0.25.0
+httpx==0.28.1
+pytest-celery==0.0.0
+fakeredis==2.26.2
+moto==5.0.22             # mock S3
+
+# Utilities
+python-dotenv==1.0.1
+tenacity==9.0.0
+
+# Auth (task #36)
+passlib[bcrypt]==1.7.4
+bcrypt<5                  # passlib 1.7.4 不兼容 bcrypt 5.x（detect_wrap_bug 自检失败）
+PyJWT==2.8.0
