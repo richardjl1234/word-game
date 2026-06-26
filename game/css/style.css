@@ -1587,3 +1587,294 @@ button:active {
         font-size: 0.9rem;
     }
 }
+
+/* ============================================================ */
+/* ★ 多词库 / 多用户 / 文件导入 - 新增样式                      */
+/* ============================================================ */
+
+/* 当前词库显示（开始界面） */
+.current-library-display {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 8px 16px;
+    background: rgba(255, 255, 255, 0.85);
+    border-radius: 12px;
+    box-shadow: var(--shadow-soft);
+    font-size: 0.95rem;
+    color: var(--primary-color);
+    margin: 0 auto;
+}
+.current-library-label {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+}
+#current-library-name {
+    font-weight: 700;
+}
+
+/* 通用小按钮 */
+.btn-small {
+    padding: 6px 14px;
+    font-size: 0.85rem;
+    border-radius: 8px;
+    border: none;
+    cursor: pointer;
+    font-weight: 600;
+    transition: transform 0.15s, box-shadow 0.15s;
+}
+.btn-small:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 3px 8px rgba(0,0,0,0.15);
+}
+.btn-small:active:not(:disabled) {
+    transform: translateY(0);
+}
+.btn-small:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+.btn-small.btn-primary {
+    background: var(--primary-color, #4A90E2);
+    color: white;
+}
+.btn-small.btn-secondary {
+    background: #f0f0f0;
+    color: #333;
+}
+.btn-small.btn-danger {
+    background: #e74c3c;
+    color: white;
+}
+
+/* 词库 / 用户管理 screen 通用布局 */
+.vocab-header, .users-header, .import-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px 30px;
+    background: rgba(255,255,255,0.9);
+    border-radius: 16px;
+    box-shadow: var(--shadow-soft);
+    margin: 20px;
+}
+.vocab-header h2, .users-header h2, .import-header h2 {
+    margin: 0;
+    color: var(--primary-color);
+}
+
+.vocab-content, .users-content, .import-content {
+    padding: 0 30px 30px;
+    overflow-y: auto;
+    max-width: 900px;
+    width: 100%;
+    margin: 0 auto;
+}
+
+.vocab-toolbar, .users-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 16px;
+}
+.vocab-hint, .users-hint {
+    color: var(--text-muted, #666);
+    font-size: 0.85rem;
+    margin: 0;
+}
+
+/* 词库卡片 */
+.library-list, .user-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+.library-empty {
+    padding: 40px;
+    text-align: center;
+    color: #999;
+    font-style: italic;
+}
+.library-card {
+    background: rgba(255,255,255,0.95);
+    border-radius: 16px;
+    padding: 16px 20px;
+    box-shadow: var(--shadow-soft);
+    cursor: pointer;
+    transition: transform 0.15s, box-shadow 0.15s;
+    border-left: 6px solid transparent;
+}
+.library-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(0,0,0,0.12);
+}
+.library-card.active {
+    border-left-color: var(--accent-color, #FFD93D);
+    background: linear-gradient(90deg, rgba(255,217,61,0.08), rgba(255,255,255,0.95));
+}
+.library-card.is-default {
+    border-left-color: var(--primary-color, #4A90E2);
+}
+.library-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 8px;
+}
+.library-name {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: var(--primary-color, #4A90E2);
+}
+.library-source {
+    font-size: 0.85rem;
+    color: #666;
+    background: #f0f0f0;
+    padding: 4px 10px;
+    border-radius: 12px;
+}
+.library-card-stats {
+    display: flex;
+    gap: 16px;
+    font-size: 0.9rem;
+    color: #555;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+}
+.library-card-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+/* 用户卡片 */
+.user-card {
+    background: rgba(255,255,255,0.95);
+    border-radius: 16px;
+    padding: 16px 20px;
+    box-shadow: var(--shadow-soft);
+    cursor: pointer;
+    transition: transform 0.15s, box-shadow 0.15s;
+    border-left: 6px solid transparent;
+}
+.user-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(0,0,0,0.12);
+}
+.user-card.active {
+    border-left-color: var(--accent-color, #FFD93D);
+    background: linear-gradient(90deg, rgba(255,217,61,0.08), rgba(255,255,255,0.95));
+}
+.user-card-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 8px;
+}
+.user-name {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: var(--primary-color, #4A90E2);
+}
+.user-badge {
+    background: var(--accent-color, #FFD93D);
+    color: #333;
+    padding: 2px 10px;
+    border-radius: 10px;
+    font-size: 0.8rem;
+    font-weight: 700;
+}
+.user-card-stats {
+    font-size: 0.9rem;
+    color: #555;
+    margin-bottom: 12px;
+}
+.user-card-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+/* 文件导入 */
+.import-target-info {
+    background: rgba(255,255,255,0.9);
+    border-radius: 12px;
+    padding: 12px 20px;
+    margin-bottom: 16px;
+    font-size: 1rem;
+    box-shadow: var(--shadow-soft);
+}
+.import-target-info #import-target-library {
+    color: var(--primary-color, #4A90E2);
+    font-weight: 700;
+}
+.import-drop-zone {
+    border: 3px dashed #ccc;
+    border-radius: 16px;
+    padding: 40px 20px;
+    text-align: center;
+    cursor: pointer;
+    background: rgba(255,255,255,0.6);
+    transition: all 0.2s;
+    margin-bottom: 16px;
+}
+.import-drop-zone:hover, .import-drop-zone.dragover {
+    border-color: var(--primary-color, #4A90E2);
+    background: rgba(74,144,226,0.05);
+}
+.import-drop-hint {
+    color: #666;
+    font-size: 1.1rem;
+}
+.import-drop-hint small {
+    display: block;
+    margin-top: 8px;
+    color: #999;
+    font-size: 0.85rem;
+}
+.import-file-info {
+    background: rgba(255,255,255,0.9);
+    border-radius: 12px;
+    padding: 12px 20px;
+    margin-bottom: 16px;
+    font-size: 0.95rem;
+    box-shadow: var(--shadow-soft);
+    display: none;
+}
+.import-file-info:not(:empty) {
+    display: block;
+}
+.import-status {
+    margin-bottom: 16px;
+}
+.import-hint {
+    background: rgba(255,217,61,0.15);
+    border-left: 4px solid var(--accent-color, #FFD93D);
+    padding: 12px 16px;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    line-height: 1.6;
+}
+.import-hint code {
+    background: #f4f4f4;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: monospace;
+    font-size: 0.85rem;
+}
+.import-hint ul {
+    margin: 8px 0;
+    padding-left: 20px;
+}
+.import-actions {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+.import-wait-hint {
+    color: #999;
+    font-size: 0.85rem;
+    margin: 0;
+}
