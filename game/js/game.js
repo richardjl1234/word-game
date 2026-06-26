@@ -187,6 +187,105 @@ class Game {
 
         // 初始化手柄焦点状态
         this.updateFocusableButtons();
+
+        // 初始化语音设置面板
+        this.bindVoiceSettings();
+    }
+
+    // ============================================================
+    // 语音设置（开始界面折叠面板）
+    // ============================================================
+
+    static VOICE_CONFIG_KEY = 'wordGameVoiceConfig';
+
+    /** 读取 localStorage 中的语音配置（无则用默认值） */
+    loadVoiceConfig() {
+        const defaults = {
+            voiceEN: this.soundManager.voiceEN,
+            voiceZH: this.soundManager.voiceZH,
+            speed:   this.soundManager.defaults.speed,
+            pitch:   this.soundManager.defaults.pitch,
+            vol:     this.soundManager.defaults.vol
+        };
+        try {
+            const saved = JSON.parse(localStorage.getItem(Game.VOICE_CONFIG_KEY) || '{}');
+            return {
+                voiceEN: saved.voiceEN || defaults.voiceEN,
+                voiceZH: saved.voiceZH || defaults.voiceZH,
+                speed:   saved.speed ?? defaults.speed,
+                pitch:   saved.pitch ?? defaults.pitch,
+                vol:     saved.vol   ?? defaults.vol
+            };
+        } catch (e) {
+            return defaults;
+        }
+    }
+
+    /** 绑定语音设置 UI：初始化控件 + 监听变化写回 localStorage */
+    bindVoiceSettings() {
+        const cfg = this.loadVoiceConfig();
+        const ids = ['voice-en', 'voice-zh', 'voice-speed', 'voice-pitch', 'voice-vol'];
+        const els = {};
+        for (const id of ids) {
+            const el = document.getElementById(id);
+            if (!el) return;  // 控件尚未渲染（极早调用）
+            els[id] = el;
+        }
+        // 写入控件
+        els['voice-en'].value = cfg.voiceEN;
+        els['voice-zh'].value = cfg.voiceZH;
+        els['voice-speed'].value = cfg.speed;
+        els['voice-pitch'].value = cfg.pitch;
+        els['voice-vol'].value = cfg.vol;
+        // 同步显示数值
+        this._updateVoiceValueDisplay();
+        // 监听
+        ids.forEach(id => {
+            els[id].addEventListener('change', () => {
+                this._saveVoiceConfig();
+                this._updateVoiceValueDisplay();
+            });
+            // slider 实时显示拖动值
+            if (id.startsWith('voice-') && (id.endsWith('-speed') || id.endsWith('-pitch') || id.endsWith('-vol'))) {
+                els[id].addEventListener('input', () => this._updateVoiceValueDisplay());
+            }
+        });
+        // 试听按钮
+        const previewBtn = document.getElementById('btn-voice-preview');
+        if (previewBtn) {
+            previewBtn.addEventListener('click', () => this.soundManager.previewVoiceSettings());
+        }
+    }
+
+    /** 同步 slider 数值显示 */
+    _updateVoiceValueDisplay() {
+        const v = id => document.getElementById('val-' + id);
+        const speed = document.getElementById('voice-speed');
+        const pitch = document.getElementById('voice-pitch');
+        const vol = document.getElementById('voice-vol');
+        if (v('speed') && speed) v('speed').textContent = parseFloat(speed.value).toFixed(2);
+        if (v('pitch') && pitch) {
+            const n = parseInt(pitch.value);
+            v('pitch').textContent = (n >= 0 ? '+' : '') + n;
+        }
+        if (v('vol') && vol) v('vol').textContent = Math.round(parseFloat(vol.value) * 100) + '%';
+    }
+
+    /** 把当前控件值写回 localStorage（同时同步到 soundManager） */
+    _saveVoiceConfig() {
+        const cfg = {
+            voiceEN: document.getElementById('voice-en').value,
+            voiceZH: document.getElementById('voice-zh').value,
+            speed:   parseFloat(document.getElementById('voice-speed').value),
+            pitch:   parseInt(document.getElementById('voice-pitch').value),
+            vol:     parseFloat(document.getElementById('voice-vol').value)
+        };
+        try {
+            localStorage.setItem(Game.VOICE_CONFIG_KEY, JSON.stringify(cfg));
+        } catch (e) {}
+        // 同步到 soundManager（不立即影响已加载 mp3，需重生成才生效）
+        this.soundManager.voiceEN = cfg.voiceEN;
+        this.soundManager.voiceZH = cfg.voiceZH;
     }
 
     showScreen(screenId) {
@@ -327,6 +426,9 @@ class Game {
 
         this.wordManager.setCurrentLevel(level);
 
+        // ★ 新增：预加载本关所有单词的 mp3（不阻塞）
+        this.soundManager.preloadLevelWords(this.wordManager.currentLevelWords);
+
         // 重置游戏状态
         this.score = 0;
         this.combo = 0;
@@ -363,10 +465,9 @@ class Game {
         // 预生成多个干扰词填充屏幕
         this.preSpawnWords();
 
-        // 重置手柄焦点
+        // 重置手柄焦点（preSpawnWords 末尾会随机选定焦点，无需提前 applyWordFocus）
         this.focusedIndex = 0;
         this.focusedButtonIndex = 0;
-        setTimeout(() => this.applyWordFocus(), 100);
 
         // 启动游戏循环
         this.lastFrameTime = performance.now();
@@ -383,8 +484,8 @@ class Game {
                 }
             }, i * 200); // 间隔200ms逐个生成
         }
-        // 单词预生成完成后，让手柄焦点落到第一个单词
-        setTimeout(() => this.applyWordFocus(), this.maxActiveWords * 200 + 50);
+        // 单词预生成完成后，随机选一个作为焦点（避免总是落在 target 上）
+        setTimeout(() => this.refocusRandom(), this.maxActiveWords * 200 + 50);
     }
 
     // 随机生成一个单词（目标或干扰）
@@ -685,22 +786,27 @@ class Game {
             this.wordManager.markWordAsUsed(this.targetMeaning.word);
         }
 
-        // 检查是否过关
-        if (this.wordManager.isLevelComplete(this.currentLevel)) {
-            this.handleLevelComplete();
-        } else {
-            // 设置下一个目标
-            this.setNextTarget();
-            // 先移除多余干扰词（直接从DOM移除，不冻结）
-            this.removeExcessRandomWords();
-            // 再加速剩余干扰词，让它们快速下落消失（落地不计错）
-            this.accelerateDrops();
-            // 立即强制生成目标单词
-            this.forceSpawnTarget();
-            this.updateUI();
-            // 重新校准手柄焦点到新目标单词（避免前一个聚焦的单词被清除后无单词高亮）
-            this.refocusRandom();
-        }
+        // ★ 答对序列：播英文 1 次 → 等 0.5s → 切下一个目标（setNextTarget 内会播下一个中文）
+        const afterEnglishCallback = this.wordManager.isLevelComplete(this.currentLevel)
+            ? () => this.handleLevelComplete()
+            : () => this.advanceToNextTarget();
+        this.soundManager.playEnglishThenCallback(this.targetMeaning, 700, afterEnglishCallback);
+    }
+
+    /** 切换到下一个目标（在英文播完 + 0.5s 间隔后被调用） */
+    advanceToNextTarget() {
+        if (!this.isRunning) return;
+        // 设置下一个目标
+        this.setNextTarget();
+        // 先移除多余干扰词（直接从DOM移除，不冻结）
+        this.removeExcessRandomWords();
+        // 再加速剩余干扰词，让它们快速下落消失（落地不计错）
+        this.accelerateDrops();
+        // 立即强制生成目标单词
+        this.forceSpawnTarget();
+        this.updateUI();
+        // 重新校准手柄焦点到新目标单词（避免前一个聚焦的单词被清除后无单词高亮）
+        this.refocusRandom();
     }
 
     // 加速所有非目标单词的下落速度，让它们快速消失
@@ -1413,6 +1519,8 @@ class Game {
             if (this.elements.meaningText) {
                 this.elements.meaningText.textContent = nextWord.meaning;
             }
+            // ★ 新增：播放中文释义（不阻塞 UI 更新）
+            this.soundManager.playChineseMeaning(nextWord.meaning, nextWord);
         } else {
             // 没有更多单词了，标记关卡完成
             this.targetMeaning = null;

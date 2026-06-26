@@ -28,6 +28,9 @@ Thumbs.db
 # Generated audio files
 game/sounds/
 
+# Daemon / voice generation logs (临时日志，不需要入库)
+logs/
+
 # Environment
 .env
 .env.local

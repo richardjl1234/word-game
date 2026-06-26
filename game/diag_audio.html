@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>音频诊断 - Word Game</title>
+    <script src="js/soundManager.js?v=23"></script>
+    <style>
+        body { font-family: monospace; padding: 20px; background: #f5f5f5; }
+        .row { background: white; padding: 12px; margin: 8px 0; border-radius: 8px; }
+        button { padding: 8px 16px; margin: 4px; font-size: 1rem; cursor: pointer; }
+        pre { background: #222; color: #0f0; padding: 10px; overflow: auto; font-size: 12px; }
+        h2 { margin-top: 24px; }
+    </style>
+</head>
+<body>
+    <h1>🔬 音频诊断</h1>
+    <p>打开浏览器开发者工具 Console 看日志。</p>
+
+    <h2>Step 1: 检查 soundManager 加载情况</h2>
+    <pre id="r1"></pre>
+
+    <h2>Step 2: 测试 playAudioFile (mp3)</h2>
+    <div class="row">
+        <button onclick="testPlayMp3('rob')">播放 rob.mp3 (en)</button>
+        <button onclick="testPlayMp3('lid')">播放 lid.mp3 (en)</button>
+        <button onclick="testPlayMp3('gun')">播放 gun.mp3 (en)</button>
+        <button onclick="testPlayMp3('to')">播放 to.mp3 (en)</button>
+        <span id="r2"></span>
+    </div>
+
+    <h2>Step 3: 检查 mp3 实际加载（src）</h2>
+    <div class="row">
+        <button onclick="testDirectAudio()">测试直接 new Audio("sounds/en/rob.mp3")</button>
+        <span id="r3"></span>
+    </div>
+
+    <h2>Step 4: 模拟 playEnglishWordTwice 调用</h2>
+    <div class="row">
+        <button onclick="testPlayTwice()">调用 playEnglishWordTwice({audio_en:'sounds/en/rob.mp3', word:'rob'})</button>
+        <span id="r4"></span>
+    </div>
+
+    <h2>Step 5: 检查缓存池</h2>
+    <pre id="r5"></pre>
+
+    <script>
+        (async function init() {
+            document.getElementById('r1').textContent = '...';
+            await soundManager.init();
+            const config = window.MINIMAX_CONFIG || {};
+            const initLog = {
+                'soundManager 存在': typeof window.soundManager,
+                'MINIMAX_CONFIG 存在': !!config.tts,
+                'voiceEN': soundManager.voiceEN,
+                'voiceZH': soundManager.voiceZH,
+                'defaults': soundManager.defaults,
+                'audioCache 大小': soundManager.audioCache.size,
+                'enabled': soundManager.enabled,
+            };
+            document.getElementById('r1').textContent = JSON.stringify(initLog, null, 2);
+        })();
+
+        function log(msg) {
+            console.log('[DIAG]', msg);
+        }
+
+        async function testPlayMp3(word) {
+            const path = `sounds/en/${word}.mp3`;
+            log(`测试 playAudioFile(${path})`);
+            try {
+                await soundManager.playAudioFile(path);
+                document.getElementById('r2').textContent = `✅ ${path} 播放成功`;
+            } catch (e) {
+                document.getElementById('r2').textContent = `❌ ${path} 错误: ${e.name} ${e.message}`;
+            }
+        }
+
+        function testDirectAudio() {
+            log('直接 new Audio("sounds/en/rob.mp3")');
+            const a = new Audio('sounds/en/rob.mp3');
+            a.addEventListener('canplaythrough', () => {
+                document.getElementById('r3').textContent = '✅ canplaythrough 已触发';
+            });
+            a.addEventListener('error', (e) => {
+                document.getElementById('r3').textContent = `❌ error 事件: ${a.error?.code} ${a.error?.message}`;
+            });
+            a.play().then(() => {
+                document.getElementById('r3').textContent = '✅ play() resolved';
+            }).catch(e => {
+                document.getElementById('r3').textContent = `❌ play() rejected: ${e.name} ${e.message}`;
+            });
+        }
+
+        function testPlayTwice() {
+            log('调用 playEnglishWordTwice');
+            soundManager.playEnglishWordTwice({word:'rob', audio_en:'sounds/en/rob.mp3'});
+            document.getElementById('r4').textContent = '⏳ 已调用，看 console';
+            setTimeout(() => {
+                document.getElementById('r4').textContent += '\n（3秒后）缓存大小: ' + soundManager.audioCache.size;
+            }, 3000);
+        }
+    </script>
+</body>
+</html>

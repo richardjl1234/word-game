@@ -258,6 +258,173 @@ button:active {
     transform: scale(1.1);
 }
 
+/* ===== 语音设置面板（开始界面折叠） ===== */
+.voice-settings-panel {
+    background: rgba(255, 255, 255, 0.85);
+    border-radius: var(--border-radius);
+    padding: 10px 20px;
+    margin-top: 10px;
+    width: 100%;
+    max-width: 460px;
+    box-shadow: var(--shadow-soft);
+}
+
+.voice-settings-panel summary {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--primary-color);
+    cursor: pointer;
+    padding: 6px 0;
+    user-select: none;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.voice-settings-panel summary::-webkit-details-marker {
+    display: none;
+}
+
+.voice-settings-panel summary::before {
+    content: '▶';
+    font-size: 0.8rem;
+    color: var(--accent-color);
+    transition: transform 0.2s;
+}
+
+.voice-settings-panel[open] summary::before {
+    transform: rotate(90deg);
+}
+
+.voice-settings-panel summary:hover {
+    color: var(--accent-color);
+}
+
+.voice-settings-body {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding-top: 10px;
+}
+
+.voice-settings-body label {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 0.95rem;
+    color: var(--text-dark);
+    font-weight: 600;
+}
+
+.voice-settings-body label span {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.voice-settings-body label em {
+    color: var(--accent-color);
+    font-style: normal;
+    font-weight: 700;
+    font-size: 1rem;
+}
+
+.voice-settings-body select,
+.voice-settings-body input[type="range"] {
+    font-family: inherit;
+    font-size: 1rem;
+    padding: 6px 10px;
+    border: 2px solid var(--secondary-color);
+    border-radius: 12px;
+    background: white;
+    color: var(--text-dark);
+    outline: none;
+    cursor: pointer;
+    width: 100%;
+}
+
+.voice-settings-body select:hover,
+.voice-settings-body input[type="range"]:hover {
+    border-color: var(--primary-color);
+}
+
+.voice-settings-body input[type="range"] {
+    padding: 0;
+    height: 28px;
+    -webkit-appearance: none;
+    background: transparent;
+    border: none;
+}
+
+.voice-settings-body input[type="range"]::-webkit-slider-runnable-track {
+    height: 6px;
+    background: var(--secondary-color);
+    border-radius: 3px;
+}
+
+.voice-settings-body input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--primary-color);
+    margin-top: -7px;
+    cursor: pointer;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.voice-settings-body input[type="range"]::-moz-range-track {
+    height: 6px;
+    background: var(--secondary-color);
+    border-radius: 3px;
+    border: none;
+}
+
+.voice-settings-body input[type="range"]::-moz-range-thumb {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--primary-color);
+    cursor: pointer;
+    border: none;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+#btn-voice-preview {
+    background: linear-gradient(135deg, var(--accent-color), #6EE7DF);
+    color: white;
+    padding: 10px 20px;
+    border-radius: var(--border-radius);
+    font-weight: 700;
+    font-size: 1rem;
+    border: none;
+    cursor: pointer;
+    margin-top: 4px;
+    box-shadow: var(--shadow-soft);
+}
+
+#btn-voice-preview:hover {
+    transform: scale(1.04);
+    box-shadow: var(--shadow-medium);
+}
+
+.voice-hint {
+    font-size: 0.78rem;
+    color: #888;
+    line-height: 1.4;
+    margin: 0;
+}
+
+.voice-hint code {
+    background: rgba(255, 107, 53, 0.12);
+    color: var(--primary-color);
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    font-family: 'Courier New', monospace;
+}
+
 /* ===== 排行榜 ===== */
 .ranking-header {
     width: 100%;

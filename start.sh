@@ -24,6 +24,16 @@ start_bg() {
         echo "❌ 服务已在运行 (PID $(cat "$PID_FILE"))"
         return 1
     fi
+    # 确保 config.js 存在（避免 404 + soundManager 拿不到 voice 配置）
+    if [ ! -f "$GAME_DIR/js/config.js" ]; then
+        if [ -f "$GAME_DIR/js/config.example.js" ]; then
+            cp "$GAME_DIR/js/config.example.js" "$GAME_DIR/js/config.js"
+            echo "📝 已从 config.example.js 创建 config.js（不含 API Key，仅占位）"
+            echo "   如需重新生成语音，编辑此文件填入真实 API Key"
+        else
+            echo "⚠️  警告: config.example.js 不存在，无法创建 config.js"
+        fi
+    fi
     nohup python3 -m http.server "$PORT" -d "$GAME_DIR" > "$LOG_FILE" 2>&1 &
     echo $! > "$PID_FILE"
     sleep 1

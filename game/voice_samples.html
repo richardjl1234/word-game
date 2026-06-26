@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>音色样本试听 - Word Game</title>
+    <style>
+        body {
+            font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+            max-width: 900px;
+            margin: 40px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        h1 { color: #333; text-align: center; }
+        h2 { color: #555; border-bottom: 2px solid #ddd; padding-bottom: 8px; margin-top: 30px; }
+        .voice-row {
+            background: white;
+            border-radius: 8px;
+            padding: 16px;
+            margin: 12px 0;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .voice-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 12px;
+        }
+        .voice-header .name { font-weight: 700; font-size: 1.1em; }
+        .voice-header .desc { color: #666; font-size: 0.9em; }
+        .pitch-row {
+            display: grid;
+            grid-template-columns: 80px 1fr 200px;
+            align-items: center;
+            gap: 12px;
+            padding: 8px 0;
+            border-top: 1px solid #eee;
+        }
+        .pitch-label {
+            font-weight: 600;
+            color: #555;
+        }
+        .pitch-label .note { font-weight: 400; color: #999; font-size: 0.8em; display: block; }
+        audio { height: 32px; width: 100%; }
+        .pick-btn {
+            padding: 6px 14px;
+            border: 2px solid #4CAF50;
+            background: white;
+            color: #4CAF50;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+        }
+        .pick-btn:hover { background: #4CAF50; color: white; }
+        .pick-btn.current { background: #4CAF50; color: white; }
+        .info {
+            background: #fff3cd;
+            border: 1px solid #ffc107;
+            border-radius: 8px;
+            padding: 12px;
+            margin: 16px 0;
+            font-size: 0.9em;
+        }
+        .info code { background: #fff; padding: 2px 6px; border-radius: 4px; }
+        .current-config {
+            background: #e3f2fd;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 20px;
+        }
+        .word-list {
+            font-family: monospace;
+            background: #fafafa;
+            padding: 8px 12px;
+            border-radius: 6px;
+            margin: 8px 0;
+            color: #555;
+        }
+    </style>
+</head>
+<body>
+    <h1>🎙️ 音色样本试听（A/B 对比 pitch）</h1>
+
+    <div class="info">
+        <strong>📌 关键发现：</strong>同一个 voice 在 pitch=+2 vs +5 听起来像完全不同的声音。
+        <br>本游戏的默认配置是 <strong>pitch=+2</strong>，所以现在游戏里听到的"像男人声"实际是 LovelyGirl 在 +2 的效果。
+        <br><strong>👉 请同时听 pitch=+2 和 +5 两栏，找到你喜欢的组合，再点"选这个"。</strong>
+    </div>
+
+    <div class="current-config">
+        <strong>当前选择：</strong> <span id="current-display">读取中...</span>
+    </div>
+
+    <div class="info">
+        <strong>🎵 试听文本（从 words.json 随机抽取的真实游戏单词）：</strong>
+        <div class="word-list">suspicion · scar · low · spray · learn · thank · move · stem</div>
+        <small>涵盖短词（low, scar, move）和长词（suspicion, learn, spray）</small>
+    </div>
+
+    <h2>🇬🇧 英文音色（speed=0.85）</h2>
+    <div id="en-voices"></div>
+
+    <h2>🇨🇳 中文音色</h2>
+    <div id="zh-voices"></div>
+
+    <script>
+        // 候选音色（pitch 是可选维度）
+        const EN_VOICES = [
+            { id: 'English_LovelyGirl',     desc: 'LovelyGirl (官方名: 可爱女童)' },
+            { id: 'English_radiant_girl',   desc: 'radiant_girl (官方名: 活泼女童)' },
+            { id: 'English_AnimeCharacter', desc: 'AnimeCharacter (动漫角色)' },
+        ];
+        const PITCHES = [
+            { value: 2, note: '当前游戏默认', isDefault: true },
+            { value: 5, note: '高音（更童声）', isDefault: false },
+        ];
+
+        // 读 localStorage 中已保存的选择
+        const saved = JSON.parse(localStorage.getItem('wordGameVoiceConfig') || '{}');
+        const currentEN = saved.voiceEN || 'English_LovelyGirl';
+        const currentZH = saved.voiceZH || 'Chinese (Mandarin)_Cute_Spirit';
+        const currentPitch = saved.pitch ?? 2;
+
+        function safeFilename(name) {
+            return name.replace(/\s/g, '_');
+        }
+
+        function renderENVoices() {
+            const container = document.getElementById('en-voices');
+            EN_VOICES.forEach(voice => {
+                const row = document.createElement('div');
+                row.className = 'voice-row';
+                let html = `
+                    <div class="voice-header">
+                        <div>
+                            <div class="name">${voice.id}</div>
+                            <div class="desc">${voice.desc}</div>
+                        </div>
+                    </div>
+                `;
+                PITCHES.forEach(p => {
+                    const isCurrent = (voice.id === currentEN && p.value === currentPitch);
+                    const safeName = safeFilename(voice.id);
+                    const audioPath = `sounds/samples/en/${safeName}_p${p.value}.mp3`;
+                    html += `
+                        <div class="pitch-row">
+                            <div class="pitch-label">
+                                pitch=+${p.value}
+                                <span class="note">${p.note}</span>
+                            </div>
+                            <audio controls preload="none" src="${audioPath}"></audio>
+                            <button class="pick-btn ${isCurrent ? 'current' : ''}"
+                                    onclick="selectConfig('${voice.id}', ${p.value})">
+                                ${isCurrent ? '✓ 当前选择' : '选这个'}
+                            </button>
+                        </div>
+                    `;
+                });
+                row.innerHTML = html;
+                container.appendChild(row);
+            });
+        }
+
+        function renderZHVoices() {
+            const container = document.getElementById('zh-voices');
+            const zhVoices = [
+                { id: 'Chinese (Mandarin)_Cute_Spirit', shortName: 'Cute_Spirit', desc: '可爱灵气' },
+                { id: 'Chinese (Mandarin)_Warm_Bestie', shortName: 'Warm_Bestie', desc: '温暖闺蜜' },
+                { id: 'Chinese (Mandarin)_Sweet_Lady',  shortName: 'Sweet_Lady',  desc: '甜美女声' },
+            ];
+            zhVoices.forEach(voice => {
+                const row = document.createElement('div');
+                row.className = 'voice-row';
+                const isCurrent = (voice.id === currentZH);
+                const safeName = voice.id.replace(/\s/g, '_').replace(/\(/g, '').replace(/\)/g, '');
+                const audioPath = `sounds/samples/zh/${safeName}.mp3`;
+                row.innerHTML = `
+                    <div class="voice-header">
+                        <div>
+                            <div class="name">${voice.id}</div>
+                            <div class="desc">${voice.desc}</div>
+                        </div>
+                    </div>
+                    <div class="pitch-row">
+                        <div class="pitch-label">pitch=+${currentPitch}<span class="note">跟英文同步</span></div>
+                        <audio controls preload="none" src="${audioPath}"></audio>
+                        <button class="pick-btn ${isCurrent ? 'current' : ''}"
+                                onclick="selectZH('${voice.id}')">
+                            ${isCurrent ? '✓ 当前选择' : '选这个'}
+                        </button>
+                    </div>
+                `;
+                container.appendChild(row);
+            });
+        }
+
+        function updateCurrentDisplay() {
+            const enVoice = EN_VOICES.find(v => v.id === currentEN);
+            document.getElementById('current-display').innerHTML = `
+                英文：${enVoice ? enVoice.id : currentEN} (pitch=+${currentPitch})<br>
+                中文：${currentZH}<br>
+                参数：speed=${saved.speed || 0.85}, pitch=+${currentPitch}, vol=${saved.vol || 1.0}
+            `;
+        }
+
+        function selectConfig(voiceId, pitch) {
+            const config = JSON.parse(localStorage.getItem('wordGameVoiceConfig') || '{}');
+            config.voiceEN = voiceId;
+            config.pitch = pitch;
+            if (!config.voiceZH) config.voiceZH = 'Chinese (Mandarin)_Cute_Spirit';
+            if (!config.speed) config.speed = 0.85;
+            if (!config.vol) config.vol = 1.0;
+            localStorage.setItem('wordGameVoiceConfig', JSON.stringify(config));
+            alert(`已选择：\n英文 voice=${voiceId}\npitch=+${pitch}\n\n下一步：\n1. 关闭此页面\n2. 跑: python3 generate_voices.py --force\n3. 重新打开游戏`);
+            location.reload();
+        }
+
+        function selectZH(voiceId) {
+            const config = JSON.parse(localStorage.getItem('wordGameVoiceConfig') || '{}');
+            config.voiceZH = voiceId;
+            if (!config.voiceEN) config.voiceEN = 'English_LovelyGirl';
+            if (!config.speed) config.speed = 0.85;
+            if (!config.pitch) config.pitch = 2;
+            if (!config.vol) config.vol = 1.0;
+            localStorage.setItem('wordGameVoiceConfig', JSON.stringify(config));
+            alert(`已选择中文 voice=${voiceId}\n\n下一步：跑 python3 generate_voices.py --force`);
+            location.reload();
+        }
+
+        renderENVoices();
+        renderZHVoices();
+        updateCurrentDisplay();
+    </script>
+</body>
+</html>
