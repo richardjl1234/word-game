@@ -22,6 +22,21 @@ PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
 GAME_DIR="$PROJECT_DIR/game"
 BACKEND_DIR="$PROJECT_DIR/backend"
 
+# ============================================================
+# 加载项目统一配置（{project_root}/../word-game_config.sh）
+# 应用必须从环境变量读密钥；启动时 source 此文件以注入 env。
+# 缺失不强制（打 warning），让 dev 默认值兜底，避免阻塞首次启动。
+# ============================================================
+PROJECT_CONFIG_SH="$PROJECT_DIR/../word-game_config.sh"
+if [ -f "$PROJECT_CONFIG_SH" ]; then
+    # shellcheck disable=SC1090
+    source "$PROJECT_CONFIG_SH"
+else
+    echo "⚠️  未找到 $PROJECT_CONFIG_SH"
+    echo "   应用将从系统环境变量读取配置；缺失时使用 dev 默认值"
+    echo "   创建方法: cp {project_root}/../word-game_config.sh.example 同名文件并填入密钥"
+fi
+
 # 前端配置
 FRONTEND_PORT="${FRONTEND_PORT:-8080}"
 FRONTEND_PID_FILE="/tmp/word-game-server.pid"
