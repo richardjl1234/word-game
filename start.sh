@@ -277,6 +277,36 @@ case "$target" in
                 ;;
         esac
         ;;
+    https)
+        # HTTPS mode: backend serves frontend, unified origin, SSL
+        CERT_DIR="${HOME}/.wordgame-dev-certs"
+        if [ ! -f "$CERT_DIR/cert.pem" ]; then
+            echo "⏳ 生成自签名证书..."
+            mkdir -p "$CERT_DIR"
+            openssl req -x509 -newkey rsa:4096 -keyout "$CERT_DIR/key.pem" \
+                -out "$CERT_DIR/cert.pem" -days 365 -nodes \
+                -subj "/CN=localhost" 2>/dev/null
+            echo "✅ 证书已生成: $CERT_DIR"
+        fi
+        export DATABASE_URL="${DATABASE_URL:-sqlite:////tmp/wordgame-backend.db}"
+        export STORAGE_BACKEND="${STORAGE_BACKEND:-local}"
+        export LOCAL_STORAGE_DIR="${LOCAL_STORAGE_DIR:-/tmp/wordgame-backend-storage}"
+        export APP_DEBUG="${APP_DEBUG:-true}"
+        echo ""
+        echo "🔐 HTTPS 模式（后端托管前端，统一端口）"
+        echo ""
+        print_usage
+        echo ""
+        echo "   访问: https://localhost:${BACKEND_PORT}/"
+        echo "   自签名证书，首次需点击 高级 → 继续前往 localhost"
+        echo ""
+        cd "$BACKEND_DIR"
+        exec "$VENV_PY" -m uvicorn app.main:app \
+            --host 0.0.0.0 --port "$BACKEND_PORT" \
+            --app-dir "$BACKEND_DIR" --reload \
+            --ssl-keyfile "$CERT_DIR/key.pem" \
+            --ssl-certfile "$CERT_DIR/cert.pem"
+        ;;
     start)
         frontend_start_bg
         print_usage

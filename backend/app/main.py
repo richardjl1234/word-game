@@ -6,15 +6,22 @@ FastAPI 应用入口
 """
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from starlette.staticfiles import StaticFiles
 
 from .config import settings, get_settings
 from .database import init_db
 from .storage import init_storage, S3Storage, LocalStorage
 from . import __version__
 from .routers import upload, jobs, libraries, auth, profiles, admin
+
+# ★ 前端静态文件路径（供 HTTPS 统一托管）
+FRONTEND_DIR = Path(__file__).resolve().parent.parent.parent / "game"
+
 
 logging.basicConfig(
     level=logging.INFO if not settings.APP_DEBUG else logging.DEBUG,
@@ -104,6 +111,13 @@ app.include_router(libraries.router, prefix="/api", tags=["libraries"])
 app.include_router(auth.router, tags=["auth"])
 app.include_router(profiles.router, tags=["profiles"])
 app.include_router(admin.router, tags=["admin"])
+
+
+# ★ 挂载前端静态文件（仅在前端目录存在时生效）
+# 使 HTTPS 模式下通过 https://<host>:8765/ 即可访问完整应用
+if FRONTEND_DIR.exists():
+    app.mount("/", StaticFiles(directory=str(FRONTEND_DIR), html=True), name="frontend")
+    logger.info(f"前端已挂载: {FRONTEND_DIR}")
 
 
 if __name__ == "__main__":

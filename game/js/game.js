@@ -165,21 +165,34 @@ class Game {
             location.reload();
         };
 
-        formLogin?.addEventListener('submit', async (e) => {
-            e.preventDefault();
+        /** 执行登录（由 submit / click 触发） */
+        const doLogin = async () => {
+            console.log('[auth] login button clicked');
             showError('');
             const username = document.getElementById('auth-login-username').value.trim();
             const password = document.getElementById('auth-login-password').value;
-            if (!username || !password) return;
+            if (!username || !password) {
+                showError('请输入昵称和密码');
+                return;
+            }
             setLoading(true);
             try {
                 const resp = await authManager.login(username, password);
+                console.log('[auth] login success');
                 await handleSuccess(resp);
             } catch (err) {
+                console.warn('[auth] login failed:', err.message);
                 showError(err.message || '登录失败');
                 setLoading(false);
             }
-        });
+        };
+
+        // 同时绑定 form submit + button click（某些浏览器 HTTP 页面对 form submit 有限制）
+        formLogin?.addEventListener('submit', (e) => { e.preventDefault(); doLogin(); });
+        const submitBtn = formLogin?.querySelector('button[type=submit]');
+        if (submitBtn) {
+            submitBtn.addEventListener('click', (e) => { e.preventDefault(); doLogin(); });
+        }
     }
 
     /** ★ task #72：强制改密模态框（admin 创建的用户首次登录必须改密） */
@@ -2647,6 +2660,32 @@ window.game = game;
 // 页面加载完成后初始化游戏
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => game.init());
+
+// ★ 全局登录处理（兜底：即使 game.init() 尚未完成也确保按钮可点）
+document.addEventListener('DOMContentLoaded', () => {
+    const submitBtn = document.querySelector('#auth-form-login button[type="submit"]');
+    if (!submitBtn) return;
+    const doLogin = async () => {
+        console.log('[auth-global] login button clicked');
+        const username = document.getElementById('auth-login-username')?.value.trim();
+        const password = document.getElementById('auth-login-password')?.value;
+        if (!username || !password) return;
+        submitBtn.disabled = true;
+        submitBtn.textContent = '⏳ 登录中...';
+        try {
+            const resp = await authManager.login(username, password);
+            if (resp && resp.token) {
+                location.reload();
+            }
+        } catch (err) {
+            const errEl = document.getElementById('auth-error');
+            if (errEl) { errEl.textContent = err.message || '登录失败'; errEl.hidden = false; }
+            submitBtn.disabled = false;
+            submitBtn.textContent = '登录';
+        }
+    };
+    submitBtn.addEventListener('click', doLogin);
+});
 } else {
     game.init();
 }
