@@ -55,6 +55,8 @@ class Account(Base):
 
     - username: 登录昵称（唯一）
     - password_hash: bcrypt 哈希后的密码
+    - role: "admin" | "user"
+    - must_change_password: admin 创建的用户首次登录必须改密
     - 一个账号下可有多个 PlayerProfile（家长账号下多个孩子）
     """
     __tablename__ = "accounts"
@@ -62,6 +64,8 @@ class Account(Base):
     id = Column(String, primary_key=True)            # "acc_<base36ts>_<rand>"
     username = Column(String, nullable=False, unique=True, index=True)
     password_hash = Column(String, nullable=False)
+    role = Column(String, default="user", nullable=False, index=True)
+    must_change_password = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     last_login_at = Column(DateTime, nullable=True)
 

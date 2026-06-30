@@ -32,10 +32,13 @@ def _resolve_owner_library(
     account: Account,
     db: Session,
 ) -> Library:
-    """校验 library 属于当前账号；找不到/不属于都抛 404（不泄露存在性）"""
+    """校验 library 属于当前账号；admin 可跳过所有权检查"""
     lib = db.query(Library).filter(Library.id == library_id).first()
     if not lib:
         raise HTTPException(status_code=404, detail="词库不存在")
+    # admin 可访问任何词库
+    if account.role == "admin":
+        return lib
     # 优先 account_id；老 user_id 也允许
     if lib.account_id and lib.account_id != account.id:
         raise HTTPException(status_code=403, detail="无权访问此词库")
@@ -76,13 +79,11 @@ def list_libraries(
     account: Account = Depends(auth_core.get_current_account),
     db: Session = Depends(get_db),
 ):
-    """列出当前账号的所有词库（按创建时间排序）"""
-    libs = (
-        db.query(Library)
-        .filter(Library.account_id == account.id)
-        .order_by(Library.created_at)
-        .all()
-    )
+    """列出当前账号（或 admin 全部）的词库（按创建时间排序）"""
+    q = db.query(Library)
+    if account.role != "admin":
+        q = q.filter(Library.account_id == account.id)
+    libs = q.order_by(Library.created_at).all()
     return libs
 
 

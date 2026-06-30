@@ -87,29 +87,34 @@ class TestUpload:
 
 
 class TestJobs:
+    """★ task #72：jobs 端点已加 JWT 鉴权，需要 auth_headers"""
+
     def test_get_job_success(self, client, auth_headers):
         files = {"file": ("test.txt", io.BytesIO(b"hello"), "text/plain")}
         r = client.post("/api/upload", files=files, headers=auth_headers)
         job_id = r.json()["id"]
-        r2 = client.get(f"/api/jobs/{job_id}")
+        r2 = client.get(f"/api/jobs/{job_id}", headers=auth_headers)
         assert r2.status_code == 200
         assert r2.json()["id"] == job_id
 
-    def test_get_job_not_found(self, client):
-        r = client.get("/api/jobs/nonexistent-id")
+    def test_get_job_not_found(self, client, auth_headers):
+        r = client.get("/api/jobs/nonexistent-id", headers=auth_headers)
         assert r.status_code == 404
 
-    def test_list_jobs_by_user_legacy(self, client):
-        """按老 user_id 过滤（兼容）"""
-        files = {"file": ("test.txt", io.BytesIO(b"hello"), "text/plain")}
-        client.post("/api/upload", files=files, data={"user_id": "u_alice"})
-        client.post("/api/upload", files=files, data={"user_id": "u_bob"})
+    def test_list_jobs_auth_required(self, client):
+        """jobs 端点无 token 应返回 401"""
+        r = client.get("/api/jobs")
+        assert r.status_code == 401, r.text
 
-        r = client.get("/api/jobs?user_id=u_alice")
+    def test_list_jobs_by_account(self, client, auth_headers):
+        """列出当前账号下的 jobs"""
+        files = {"file": ("test.txt", io.BytesIO(b"hello word-game"), "text/plain")}
+        client.post("/api/upload", files=files, headers=auth_headers)
+        r = client.get("/api/jobs", headers=auth_headers)
         assert r.status_code == 200
         body = r.json()
-        assert body["total"] == 1
-        assert body["jobs"][0]["user_id"] == "u_alice"
+        assert body["total"] >= 1
+        assert len(body["jobs"]) >= 1
 
 
 class TestLibraries:

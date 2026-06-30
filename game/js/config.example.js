@@ -13,8 +13,11 @@ window.MINIMAX_CONFIG = {
   // 自动使用浏览器当前 host 作为后端主机（同机部署 / LAN 部署都通用）；
   // 若要强制指向特定后端，可写成 'http://192.168.x.x:8765'。
   backendUrl: (() => {
-    const h = (typeof window !== 'undefined' && window.location && window.location.hostname) || '127.0.0.1';
-    return `http://${h}:8765`;
+    const w = typeof window !== 'undefined' && window.location;
+    const p = w ? w.protocol : 'http:';
+    const h = w ? w.hostname : '127.0.0.1';
+    // 始终使用 8765 端口（HTTP 和 HTTPS 都是此端口）
+    return `${p}//${h}:8765`;
   })(),
 
   tts: {

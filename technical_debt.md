@@ -525,3 +525,32 @@ curl -s http://$LAN_IP:8765/api/health  # 应返 status=ok
 - Playwright 跑 `test_e2e_ingest.js`：T3 偶发 flaky（TD-008）；
   提 timeout 不影响该测试本身的轮询计时
 - 手动测 200 词 txt 导入应不再 2 分钟超时
+
+
+---
+
+## TD-014: 管理员/普通用户角色系统（task #72）
+
+### 现状
+引入了 admin/user 两级角色。Account 模型新增 `role` + `must_change_password` 列。
+注册改为 admin-only，普通用户只能玩游戏，admin 管理用户/词库/导入。
+
+### 已实现
+- 后端：role 字段、JWT payload 含 role、get_current_admin 依赖、change-password 端点、
+  admin API（/api/admin/accounts CRUD + reset-password）、jobs 鉴权加固、
+  libraries/profiles 的 admin bypass
+- 前端：authManager.isAdmin()/mustChangePassword()/changePassword()、
+  showScreen() 权限守卫、非 admin 隐藏管理按钮、首次登录改密弹窗、
+  admin 账号管理面板（用户管理页内）
+- 测试：test_admin.py（+21 个新测试）、现有测试适配（auth_account 改 ORM 创建）
+- 启动时自动创建 admin 账号（admin/admin123）
+
+### 已知限制
+**优先级：低**
+
+1. **排行榜清空**：当前 `btn-clear-ranking` 对 admin 仍可见，但前端没对它做权限判断。
+   后端没有专门加固（ranking 走 localStorage，不是后端 API），后续可加。
+2. **历史数据**：`_ensure_schema()` 用 raw SQL `ALTER TABLE` 加列，兼容 SQLite + Postgres。
+   旧 DB 文件 (`wordgame.db`) 中已存在的 Account 默认 `role="user"`。
+   但由于用户说可以清旧数据，启动前若删掉 wordgame.db 更干净。
+3. **admin 账号密码**：默认 dev 值 `admin/admin123`，生产必须 export env 覆盖。

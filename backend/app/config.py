@@ -70,6 +70,12 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRE_DAYS: int = 7
 
+    # Admin account（dev 默认值，生产覆盖）
+    ADMIN_USERNAME: str = "admin"
+    ADMIN_PASSWORD: str = "admin123"
+    DEFAULT_USER_PASSWORD: str = "1234"
+    MIN_PASSWORD_LENGTH: int = 4
+
     @property
     def cors_origins_list(self) -> List[str]:
         return [o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip()]

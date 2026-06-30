@@ -94,6 +94,16 @@ class AuthManager {
         return !!(this.token && this.account && this.profile);
     }
 
+    /** ★ task #72：当前账号是否为 admin */
+    isAdmin() {
+        return this.account?.role === 'admin';
+    }
+
+    /** ★ task #72：当前账号是否需要强制改密 */
+    mustChangePassword() {
+        return this.account?.must_change_password === true;
+    }
+
     getToken() { return this.token; }
     getAccountId() { return this.account?.id; }
     getProfileId() { return this.profile?.id; }
@@ -147,6 +157,16 @@ class AuthManager {
 
     async fetchMe() {
         return await this.apiFetch('/api/auth/me', { method: 'GET' });
+    }
+
+    /** ★ task #72：修改密码 */
+    async changePassword(oldPassword, newPassword) {
+        const data = await this.apiFetch('/api/auth/change-password', {
+            method: 'POST',
+            body: JSON.stringify({ old_password: oldPassword, new_password: newPassword }),
+        });
+        this._saveSession(data);
+        return data;
     }
 
     /** 列出本账号下所有 profiles */
@@ -227,9 +247,13 @@ class AuthManager {
         this.token = data.token;
         this.account = data.account;
         this.profile = data.profile;
+        // ★ task #72：保存响应中的 must_change_password（login/register/change-password 可能携带）
+        if (data.must_change_password !== undefined && this.account) {
+            this.account.must_change_password = data.must_change_password;
+        }
         localStorage.setItem(TOKEN_KEY, data.token);
-        localStorage.setItem(ACCOUNT_KEY, JSON.stringify(data.account));
-        localStorage.setItem(PROFILE_KEY, JSON.stringify(data.profile));
+        localStorage.setItem(ACCOUNT_KEY, JSON.stringify(this.account));
+        localStorage.setItem(PROFILE_KEY, JSON.stringify(this.profile));
     }
 }
 
