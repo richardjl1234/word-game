@@ -9,6 +9,13 @@
 window.MINIMAX_CONFIG = {
   apiKey: '',
   groupId: '',
+  // ★ 后端 API 地址（导入词库、上传文件等功能）
+  // 自动使用浏览器当前 host 作为后端主机（同机部署 / LAN 部署都通用）；
+  // 若要强制指向特定后端，可写成 'http://192.168.x.x:8765'。
+  backendUrl: (() => {
+    const h = (typeof window !== 'undefined' && window.location && window.location.hostname) || '127.0.0.1';
+    return `http://${h}:8765`;
+  })(),
 
   tts: {
     // MiniMax 语音模型（speech-2.8-hd 高清版）

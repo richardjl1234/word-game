@@ -25,37 +25,78 @@ function safeFilename(name) {
 
 class WordManager {
     constructor() {
-        this.wordsData = [];
         this.currentLevel = 1;
-        this.totalLevels = 50;
-        this.wordsPerLevel = 25;
         this.currentLevelWords = [];
         this.usedWords = [];
         this.matchedWords = [];
-        this.progressData = {};
+        this.progressData = {};       // 当前 (userId, libraryId) 组合的进度
         this.missedWords = [];        // 当前关卡未掌握的目标词
         this.missCount = {};          // 当前关卡单词落地次数追踪
         this.MISS_LIMIT = 2;          // 目标词落地 2 次记为错过
         this.loaded = false;
+        this.distractorPool = null;
+    }
+
+    /**
+     * 当前词库 ID（来自 librariesManager）
+     */
+    get currentLibraryId() {
+        return (typeof librariesManager !== 'undefined' && librariesManager.getCurrentLibraryId)
+            ? librariesManager.getCurrentLibraryId()
+            : 'default';
+    }
+
+    /**
+     * 当前词库的单词数据
+     */
+    get wordsData() {
+        return (typeof librariesManager !== 'undefined' && librariesManager.getCurrentWords)
+            ? librariesManager.getCurrentWords()
+            : [];
+    }
+
+    /**
+     * 当前词库的总关数
+     */
+    get totalLevels() {
+        return (typeof librariesManager !== 'undefined' && librariesManager.getTotalLevels)
+            ? librariesManager.getTotalLevels(this.currentLibraryId, this._wordsPerLevelBase)
+            : 50;
+    }
+
+    /**
+     * 当前词库每关词数
+     * - 默认词库：可由游戏设置覆盖（兼容旧版"每关匹配数"下拉）
+     * - 自定义词库：固定 50
+     */
+    get wordsPerLevel() {
+        if (this.currentLibraryId !== 'default') {
+            return (typeof librariesManager !== 'undefined' && librariesManager.getWordsPerLevel)
+                ? librariesManager.getWordsPerLevel(this.currentLibraryId)
+                : 50;
+        }
+        return this._wordsPerLevelOverride || 25;
+    }
+    set wordsPerLevel(value) {
+        // 仅在默认词库允许覆盖
+        if (this.currentLibraryId === 'default') {
+            this._wordsPerLevelOverride = parseInt(value) || 25;
+        }
+    }
+
+    get _wordsPerLevelBase() {
+        return 25;
     }
 
     async loadWords() {
-        this.progressData = this.loadProgress();
-
-        try {
-            const response = await fetch('data/words.json');
-            if (response.ok) {
-                const data = await response.json();
-                this.wordsData = data.words || [];
-                this.loaded = true;
-                return true;
-            }
-        } catch (error) {
-            console.warn('Failed to load words.json, using fallback data');
+        // 初始化用户 + 词库
+        if (typeof usersManager !== 'undefined') {
+            await usersManager.init();
         }
-
-        // 使用内置的备用词库
-        this.wordsData = this.getFallbackWords();
+        if (typeof librariesManager !== 'undefined') {
+            await librariesManager.init();
+        }
+        this.progressData = this.loadProgress();
         this.loaded = true;
         return true;
     }
@@ -267,11 +308,28 @@ class WordManager {
         return fallbackWords;
     }
 
+    /**
+     * 当前 (userId, libraryId) 组合下的进度存储 key
+     */
+    _progressKey() {
+        const userId = (typeof usersManager !== 'undefined' && usersManager.getCurrentUserId)
+            ? usersManager.getCurrentUserId() : 'default';
+        const libId = this.currentLibraryId;
+        return `wordGameProgress_${userId}_${libId}`;
+    }
+
     loadProgress() {
         try {
-            const saved = localStorage.getItem('wordGameProgress');
+            const saved = localStorage.getItem(this._progressKey());
             if (saved) {
-                return JSON.parse(saved);
+                const data = JSON.parse(saved);
+                // 兜底字段
+                return {
+                    completedLevels: data.completedLevels || [],
+                    highScores: data.highScores || {},
+                    missedWords: data.missedWords || [],
+                    missedWordHits: data.missedWordHits || {},
+                };
             }
         } catch (e) {
             console.warn('Failed to load progress:', e);
@@ -279,12 +337,16 @@ class WordManager {
         return { completedLevels: [], highScores: {}, missedWords: [], missedWordHits: {} };
     }
 
-    // 错词本相关：保存错词到 localStorage
+    // 错词本相关：保存错词到当前 (userId, libraryId) 桶
     saveMissedWord(wordData) {
+        // 优先走 librariesManager（按 libraryId 分桶），它内部会处理默认/自定义差异
+        if (typeof librariesManager !== 'undefined' && librariesManager.saveMissedWord) {
+            return librariesManager.saveMissedWord(this.currentLibraryId, wordData);
+        }
+        // 回退到本地 progressData（首次启动等边界情况）
         if (!this.progressData.missedWords) {
             this.progressData.missedWords = [];
         }
-        // 避免重复添加相同单词
         const exists = this.progressData.missedWords.some(
             m => m.word === wordData.word
         );
@@ -293,7 +355,6 @@ class WordManager {
                 word: wordData.word,
                 meaning: wordData.meaning,
                 difficulty: wordData.difficulty,
-                // ★ 关键：写入时就把音频路径存进存档
                 audio_en: wordData.audio_en || `sounds/en/${safeFilename(wordData.word)}.mp3`,
                 audio_zh: wordData.audio_zh || `sounds/zh/${safeFilename(wordData.meaning)}.mp3`,
                 missedAt: Date.now()
@@ -303,15 +364,20 @@ class WordManager {
     }
 
     getMissedWords() {
+        if (typeof librariesManager !== 'undefined' && librariesManager.getMissedWords) {
+            return librariesManager.getMissedWords(this.currentLibraryId);
+        }
         return this.progressData.missedWords || [];
     }
 
     removeMissedWord(word) {
+        if (typeof librariesManager !== 'undefined' && librariesManager.removeMissedWord) {
+            librariesManager.removeMissedWord(this.currentLibraryId, word);
+        }
         if (!this.progressData.missedWords) return;
         this.progressData.missedWords = this.progressData.missedWords.filter(
             m => m.word !== word
         );
-        // 同时清除对应的累计次数
         if (this.progressData.missedWordHits) {
             delete this.progressData.missedWordHits[word];
         }
@@ -338,7 +404,6 @@ class WordManager {
     }
 
     // 错词关卡：累计 3 次正确后才算掌握（不立即删除，由 cleanupMasteredWords 统一清理）
-    // 返回 { mastered: bool, hits: number, required: number }
     markMissedWordProgress(word, required = 3) {
         const hits = this.recordMissedWordHit(word);
         if (hits >= required) {
@@ -347,7 +412,7 @@ class WordManager {
         return { mastered: false, hits, required };
     }
 
-    // 清理已掌握 3 次的错词（在关卡开始或结束时调用）
+    // 清理已掌握 3 次的错词
     cleanupMasteredWords() {
         if (!this.progressData.missedWordHits) return;
         const hits = this.progressData.missedWordHits;
@@ -358,6 +423,9 @@ class WordManager {
     }
 
     getMissedWordsCount() {
+        if (typeof librariesManager !== 'undefined' && librariesManager.getMissedWordsCount) {
+            return librariesManager.getMissedWordsCount(this.currentLibraryId);
+        }
         return (this.progressData.missedWords || []).length;
     }
 
@@ -374,13 +442,20 @@ class WordManager {
 
     saveProgress() {
         try {
-            localStorage.setItem('wordGameProgress', JSON.stringify(this.progressData));
+            localStorage.setItem(this._progressKey(), JSON.stringify(this.progressData));
         } catch (e) {
             console.warn('Failed to save progress:', e);
         }
     }
 
     getLevelWords(level) {
+        // 自定义词库：委托给 librariesManager（按 50 词/关切片）
+        if (this.currentLibraryId !== 'default' &&
+            typeof librariesManager !== 'undefined' &&
+            librariesManager.getLevelWords) {
+            return librariesManager.getLevelWords(this.currentLibraryId, level, this.wordsPerLevel);
+        }
+
         // 错题关卡：干扰词池 = 错词本中所有 difficulty 范围内的单词
         if (level === 'missed') {
             const missed = this.getMissedWords();
@@ -394,7 +469,7 @@ class WordManager {
             return pool;
         }
 
-        // 按 difficulty 字段精确匹配关卡
+        // 默认词库：按 difficulty 字段范围匹配（兼容旧版）
         let range = 0;
         let levelWords = [];
 
@@ -571,6 +646,19 @@ class WordManager {
 
     getTotalWords() {
         return this.wordsData.length;
+    }
+
+    /**
+     * 切换当前词库后重新加载相关数据
+     * 由 game.js 在 setCurrentLibrary 后调用
+     */
+    onLibraryChanged() {
+        this.usedWords = [];
+        this.matchedWords = [];
+        this.missedWords = [];
+        this.missCount = {};
+        this.currentLevelWords = [];
+        this.progressData = this.loadProgress();
     }
 
     // 获取难度对应的样式类

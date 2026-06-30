@@ -48,11 +48,32 @@ class Game {
             await new Promise(resolve => document.addEventListener('DOMContentLoaded', resolve));
         }
 
-        // 初始化各个管理器
+        // ★ task #36：先初始化 authManager（强制清理老游客数据 + 验证 token）
+        const backendUrl = (window.MINIMAX_CONFIG && window.MINIMAX_CONFIG.backendUrl) || 'http://127.0.0.1:8765';
+        const authState = await authManager.init(backendUrl);
+
+        // 缓存DOM元素
+        this.cacheElements();
+
+        // ★ 未登录 → 直接跳到 auth-screen，不进游戏（不跑 bindEvents/管理器初始化）
+        if (!authState.loggedIn) {
+            this._setupAuthScreen();
+            this.showScreen('auth-screen');
+            return;
+        }
+
+        // 已登录：先建好各管理器实例
         this.soundManager = window.soundManager || new SoundManager();
         this.animationPlayer = window.animationPlayer || new AnimationPlayer();
         this.wordManager = window.wordManager || new WordManager();
         this.collisionDetector = window.collisionDetector || new CollisionDetector();
+        this.gamepadController = window.gamepadController;
+
+        // 同步 profiles 到 usersManager
+        usersManager.setProfiles(authManager.profiles);
+
+        // 设置事件监听（依赖各管理器实例）
+        this.bindEvents();
 
         // 初始化音效和动画播放器
         await this.soundManager.init();
@@ -65,12 +86,6 @@ class Game {
 
         // 加载词库
         await this.wordManager.loadWords();
-
-        // 缓存DOM元素
-        this.cacheElements();
-
-        // 设置事件监听
-        this.bindEvents();
 
         // 显示初始界面
         this.showScreen('start-screen');
@@ -87,7 +102,12 @@ class Game {
             'game-screen': document.getElementById('game-screen'),
             'pause-screen': document.getElementById('pause-screen'),
             'win-screen': document.getElementById('win-screen'),
-            'gameover-screen': document.getElementById('gameover-screen')
+            'gameover-screen': document.getElementById('gameover-screen'),
+            'ranking-screen': document.getElementById('ranking-screen'),
+            'vocab-screen': document.getElementById('vocab-screen'),
+            'users-screen': document.getElementById('users-screen'),
+            'import-screen': document.getElementById('import-screen'),
+            'auth-screen': document.getElementById('auth-screen'),
         };
 
         this.elements = {
@@ -99,8 +119,95 @@ class Game {
             lives: document.getElementById('lives'),
             currentLevel: document.getElementById('current-level'),
             progress: document.getElementById('progress'),
-            levelGrid: document.getElementById('level-grid')
+            levelGrid: document.getElementById('level-grid'),
+            libraryList: document.getElementById('library-list'),
+            userList: document.getElementById('user-list'),
+            currentLibraryName: document.getElementById('current-library-name'),
         };
+    }
+
+    /** task #36：注册 auth-screen 的 tab + 表单事件 */
+    _setupAuthScreen() {
+        const tabLogin = document.getElementById('auth-tab-login');
+        const tabRegister = document.getElementById('auth-tab-register');
+        const formLogin = document.getElementById('auth-form-login');
+        const formRegister = document.getElementById('auth-form-register');
+        const errEl = document.getElementById('auth-error');
+        const loadingEl = document.getElementById('auth-loading');
+
+        const showError = (msg) => {
+            if (!errEl) return;
+            errEl.textContent = msg || '';
+            errEl.hidden = !msg;
+        };
+        const setLoading = (on) => {
+            if (loadingEl) loadingEl.hidden = !on;
+            formLogin.querySelector('button[type=submit]').disabled = !!on;
+            formRegister.querySelector('button[type=submit]').disabled = !!on;
+        };
+
+        const switchTab = (tab) => {
+            const isLogin = tab === 'login';
+            tabLogin.classList.toggle('active', isLogin);
+            tabRegister.classList.toggle('active', !isLogin);
+            formLogin.hidden = !isLogin;
+            formRegister.hidden = isLogin;
+            showError('');
+        };
+        tabLogin?.addEventListener('click', () => switchTab('login'));
+        tabRegister?.addEventListener('click', () => switchTab('register'));
+
+        const handleSuccess = async (resp) => {
+            authManager._saveSession(resp);
+            usersManager.setProfiles([resp.profile]);
+            // 重启游戏（重新初始化游戏管理器）
+            location.reload();
+        };
+
+        formLogin?.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            showError('');
+            const username = document.getElementById('auth-login-username').value.trim();
+            const password = document.getElementById('auth-login-password').value;
+            if (!username || !password) return;
+            setLoading(true);
+            try {
+                const resp = await authManager.login(username, password);
+                await handleSuccess(resp);
+            } catch (err) {
+                showError(err.message || '登录失败');
+                setLoading(false);
+            }
+        });
+
+        formRegister?.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            showError('');
+            const username = document.getElementById('auth-register-username').value.trim();
+            const password = document.getElementById('auth-register-password').value;
+            const confirm = document.getElementById('auth-register-password-confirm').value;
+            if (!username || !password) return;
+            if (password !== confirm) {
+                showError('两次密码不一致');
+                return;
+            }
+            setLoading(true);
+            try {
+                const resp = await authManager.register(username, password);
+                await handleSuccess(resp);
+            } catch (err) {
+                showError(err.message || '注册失败');
+                setLoading(false);
+            }
+        });
+    }
+
+    /** task #36：登出后跳到 auth-screen */
+    async logout() {
+        if (!confirm('确定要退出登录吗？进度已自动保存到服务器。')) return;
+        authManager.logout();
+        usersManager.setProfiles([]);
+        location.reload();
     }
 
     bindEvents() {
@@ -114,10 +221,26 @@ class Game {
             if (name) this.setCurrentPlayer(name);
         });
 
+        // ★ 多词库 / 多用户 / 文件导入 入口
+        document.getElementById('btn-vocab')?.addEventListener('click', () => this.showVocabManager());
+        document.getElementById('btn-users')?.addEventListener('click', () => this.showUsersManager());
+        document.getElementById('btn-import')?.addEventListener('click', () => this.showImport());
+        document.getElementById('btn-edit-library-name')?.addEventListener('click', () => this.editCurrentLibraryName());
+        document.getElementById('btn-logout')?.addEventListener('click', () => this.logout());
+
         // 返回按钮
         document.getElementById('btn-back-from-levels')?.addEventListener('click', () => this.showScreen('start-screen'));
         document.getElementById('btn-back-from-about')?.addEventListener('click', () => this.showScreen('start-screen'));
         document.getElementById('btn-back-from-ranking')?.addEventListener('click', () => this.showScreen('start-screen'));
+        document.getElementById('btn-back-from-vocab')?.addEventListener('click', () => this.showScreen('start-screen'));
+        document.getElementById('btn-back-from-users')?.addEventListener('click', () => this.showScreen('start-screen'));
+        document.getElementById('btn-back-from-import')?.addEventListener('click', () => this.showScreen('start-screen'));
+
+        // 词库管理界面按钮
+        document.getElementById('btn-create-library')?.addEventListener('click', () => this.createLibraryPrompt());
+
+        // 用户管理界面按钮
+        document.getElementById('btn-create-user')?.addEventListener('click', () => this.createUserPrompt());
         document.getElementById('btn-clear-ranking')?.addEventListener('click', () => {
             if (confirm('确定要清空排行榜吗？此操作不可撤销。')) {
                 this.clearRanking();
@@ -345,7 +468,11 @@ class Game {
 
         grid.innerHTML = '';
 
-        for (let i = 1; i <= 50; i++) {
+        const totalLevels = this.wordManager.totalLevels || 50;
+        // 自定义词库无 easy/medium/hard 难度概念，统一用 medium 样式
+        const isCustomLib = this.wordManager.currentLibraryId !== 'default';
+
+        for (let i = 1; i <= totalLevels; i++) {
             const btn = document.createElement('button');
             btn.className = 'level-btn';
             btn.textContent = i;
@@ -353,7 +480,9 @@ class Game {
             if (this.wordManager.isLevelCompleted(i)) {
                 btn.classList.add('completed');
             } else if (this.wordManager.isLevelUnlocked(i)) {
-                if (i <= 10) btn.classList.add('easy');
+                if (isCustomLib) {
+                    btn.classList.add('medium');
+                } else if (i <= 10) btn.classList.add('easy');
                 else if (i <= 30) btn.classList.add('medium');
                 else btn.classList.add('hard');
             } else {
@@ -368,6 +497,15 @@ class Game {
             });
 
             grid.appendChild(btn);
+        }
+
+        // 更新顶部"选择关卡"标题带当前词库名
+        const titleEl = document.querySelector('#level-select-screen h2');
+        if (titleEl && this.wordManager.currentLibraryId) {
+            const lib = (typeof librariesManager !== 'undefined')
+                ? librariesManager.getCurrentLibrary() : null;
+            const name = lib ? lib.name : '默认词库';
+            titleEl.textContent = `选择关卡 · ${name}`;
         }
 
         // 渲染"错词复习"特殊关卡
@@ -1215,7 +1353,8 @@ class Game {
         let selector = '';
         switch (this.currentScreen) {
             case 'start-screen':
-                selector = '#start-screen .setting-stepper, #start-screen .btn-primary, #start-screen .btn-secondary, #start-screen .btn-edit-name';
+                // ★ 只聚焦主按钮和设置 stepper，编辑按钮（修改名字/词库名）是次要操作
+                selector = '#start-screen .setting-stepper, #start-screen .btn-primary, #start-screen .btn-secondary, #current-player-display .btn-edit-name';
                 break;
             case 'ranking-screen':
                 selector = '#ranking-screen .btn-back, #ranking-screen .btn-clear-ranking';
@@ -1242,6 +1381,21 @@ class Game {
         }
         const btns = Array.from(document.querySelectorAll(selector))
             .filter(b => b.offsetParent !== null);  // 只保留可见按钮
+        // 按 selector 顺序排序（querySelectorAll 按 DOM 顺序，但 selector 用逗号分隔时也按 DOM）
+        // 对 start-screen 我们希望 stepper → 主按钮 → 次要按钮 的顺序
+        if (this.currentScreen === 'start-screen') {
+            btns.sort((a, b) => {
+                const order = (el) => {
+                    if (el.classList.contains('setting-stepper')) return 0;
+                    if (el.id === 'btn-start') return 1;
+                    if (el.classList.contains('btn-primary')) return 1;
+                    if (el.classList.contains('btn-secondary')) return 2;
+                    if (el.classList.contains('btn-edit-name')) return 3;
+                    return 4;
+                };
+                return order(a) - order(b);
+            });
+        }
         this.focusableButtons = btns;
         if (this.focusedButtonIndex >= btns.length) this.focusedButtonIndex = 0;
         this.applyButtonFocus();
@@ -1333,6 +1487,10 @@ class Game {
 
     /** 读取当前玩家名（可能为空字符串） */
     getCurrentPlayer() {
+        if (typeof usersManager !== 'undefined' && usersManager.getCurrentUserName) {
+            return usersManager.getCurrentUserName();
+        }
+        // 回退到旧 key
         try {
             return localStorage.getItem(Game.STORAGE_KEYS.player) || '';
         } catch (e) {
@@ -1340,17 +1498,39 @@ class Game {
         }
     }
 
-    /** 设置当前玩家名 */
+    /** 设置当前玩家名（重命名当前用户；若无用户则创建） */
     setCurrentPlayer(name) {
         const trimmed = String(name || '').trim().slice(0, 20);
-        try {
-            if (trimmed) {
-                localStorage.setItem(Game.STORAGE_KEYS.player, trimmed);
+        if (!trimmed) return;
+        if (typeof usersManager !== 'undefined') {
+            let currentId = usersManager.getCurrentUserId();
+            if (!currentId) {
+                const user = usersManager.createUser(trimmed);
+                if (user) usersManager.switchUser(user.id);
             } else {
-                localStorage.removeItem(Game.STORAGE_KEYS.player);
+                usersManager.renameUser(currentId, trimmed);
             }
+        } else {
+            try {
+                localStorage.setItem(Game.STORAGE_KEYS.player, trimmed);
+            } catch (e) {}
+        }
+        // ★ 向后兼容：同步写旧 key，老存档/旧测试不会断
+        try {
+            localStorage.setItem(Game.STORAGE_KEYS.player, trimmed);
         } catch (e) {}
         this.updateCurrentPlayerDisplay();
+    }
+
+    /** 排行榜条目改名：把 name 改成 currentUserName 但保留 userId */
+    _updateRankingPlayerName(newName) {
+        try {
+            const raw = localStorage.getItem(Game.STORAGE_KEYS.ranking);
+            if (!raw) return;
+            const list = JSON.parse(raw);
+            // 旧数据没 userId，只能按当前 user 推断：若列表里没有 userId 字段则不动
+            // 安全做法：跳过（排行榜条目 name 不会自动更新）
+        } catch (e) {}
     }
 
     /** 更新开始界面"当前玩家"显示 */
@@ -1359,6 +1539,11 @@ class Game {
         if (!el) return;
         const name = this.getCurrentPlayer();
         el.textContent = name || '未设置';
+
+        // ★ 同时刷新当前词库显示
+        if (this.updateCurrentLibraryDisplay) {
+            this.updateCurrentLibraryDisplay();
+        }
     }
 
     /**
@@ -1603,6 +1788,669 @@ class Game {
 
         // 如果找不到完全不重叠的位置，返回随机位置
         return Math.random() * (areaWidth - bubbleWidth - 40) + 20;
+    }
+
+    // ============================================================
+    // ★ 多词库 / 多用户 / 文件导入
+    // ============================================================
+
+    /**
+     * 显示词库管理界面（vocab-screen）
+     */
+    showVocabManager() {
+        this.renderLibraryList();
+        this.updateCurrentLibraryDisplay();
+        this.showScreen('vocab-screen');
+    }
+
+    /**
+     * 渲染词库列表（默认 + 自定义）
+     */
+    renderLibraryList() {
+        const container = this.elements.libraryList;
+        if (!container) return;
+        container.innerHTML = '';
+
+        const libs = (typeof librariesManager !== 'undefined')
+            ? librariesManager.listLibraries()
+            : [];
+
+        if (libs.length === 0) {
+            const empty = document.createElement('div');
+            empty.className = 'library-empty';
+            empty.textContent = '暂未加载词库，请刷新页面';
+            container.appendChild(empty);
+            return;
+        }
+
+        const currentId = librariesManager.getCurrentLibraryId();
+
+        libs.forEach(lib => {
+            const card = document.createElement('div');
+            card.className = 'library-card';
+            if (lib.id === currentId) card.classList.add('active');
+            if (lib.isDefault) card.classList.add('is-default');
+
+            const sourceLabel = {
+                'default': '📦 内置',
+                'manual': '✏️ 手动',
+                'import:mp3': '🎵 MP3 导入',
+                'import:pdf': '📄 PDF 导入',
+                'import:txt': '📝 TXT 导入',
+                'import:docx': '📘 DOCX 导入',
+                'import:image': '🖼️ 图片导入',
+            }[lib.source] || lib.source;
+
+            const dateStr = lib.createdAt
+                ? new Date(lib.createdAt).toLocaleDateString('zh-CN')
+                : '';
+
+            card.innerHTML = `
+                <div class="library-card-header">
+                    <div class="library-name">${this._escapeHtml(lib.name)}</div>
+                    <div class="library-source">${sourceLabel}</div>
+                </div>
+                <div class="library-card-stats">
+                    <span>📚 ${lib.wordCount} 词</span>
+                    <span>🎯 ${lib.levelCount} 关</span>
+                    ${dateStr ? `<span>📅 ${dateStr}</span>` : ''}
+                </div>
+                <div class="library-card-actions"></div>
+            `;
+
+            const actions = card.querySelector('.library-card-actions');
+
+            // 切换按钮
+            const switchBtn = document.createElement('button');
+            switchBtn.className = 'btn-small btn-primary';
+            switchBtn.textContent = lib.id === currentId ? '✓ 当前使用' : '切换';
+            if (lib.id === currentId) switchBtn.disabled = true;
+            switchBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.switchLibrary(lib.id);
+            });
+            actions.appendChild(switchBtn);
+
+            // 重命名（默认词库不允许）
+            if (!lib.isDefault) {
+                const renameBtn = document.createElement('button');
+                renameBtn.className = 'btn-small btn-secondary';
+                renameBtn.textContent = '重命名';
+                renameBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this.renameLibraryPrompt(lib.id);
+                });
+                actions.appendChild(renameBtn);
+
+                const delBtn = document.createElement('button');
+                delBtn.className = 'btn-small btn-danger';
+                delBtn.textContent = '删除';
+                delBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this.deleteLibraryPrompt(lib.id);
+                });
+                actions.appendChild(delBtn);
+            }
+
+            // 点击卡片 = 切换
+            card.addEventListener('click', () => this.switchLibrary(lib.id));
+            container.appendChild(card);
+        });
+    }
+
+    /**
+     * 切换到指定词库
+     */
+    switchLibrary(libraryId) {
+        if (typeof librariesManager === 'undefined') return;
+        if (librariesManager.getCurrentLibraryId() === libraryId) return;
+        if (!librariesManager.setCurrentLibrary(libraryId)) {
+            this.showMessage('切换失败');
+            return;
+        }
+        // 通知 wordManager 重置会话状态
+        if (this.wordManager && this.wordManager.onLibraryChanged) {
+            this.wordManager.onLibraryChanged();
+        }
+        const lib = librariesManager.getLibrary(libraryId);
+        this.showMessage(`已切换到「${lib.name}」`);
+        this.renderLibraryList();
+        this.updateCurrentLibraryDisplay();
+    }
+
+    /**
+     * 更新开始界面"当前词库"显示
+     */
+    updateCurrentLibraryDisplay() {
+        const el = this.elements.currentLibraryName;
+        if (!el) return;
+        if (typeof librariesManager === 'undefined') {
+            el.textContent = '';
+            return;
+        }
+        const lib = librariesManager.getCurrentLibrary();
+        if (lib) {
+            el.textContent = `📚 当前词库：${lib.name}`;
+            el.style.display = '';
+        } else {
+            el.textContent = '';
+            el.style.display = 'none';
+        }
+    }
+
+    /**
+     * 创建新词库的 modal 流程
+     */
+    async createLibraryPrompt() {
+        const result = await this._promptForText({
+            title: '新建自定义词库',
+            label: '词库名称',
+            placeholder: '例如：人教版初一 / BBC 词汇',
+            maxLength: 30,
+        });
+        if (!result) return;
+        const lib = librariesManager.createLibrary(result, 'manual');
+        if (!lib) {
+            this.showMessage('创建失败（名字为空或已存在）');
+            return;
+        }
+        this.renderLibraryList();
+        this.showMessage(`已创建「${lib.name}」`);
+    }
+
+    async renameLibraryPrompt(libraryId) {
+        const lib = librariesManager.getLibrary(libraryId);
+        if (!lib) return;
+        const result = await this._promptForText({
+            title: '重命名词库',
+            label: '新名字',
+            defaultValue: lib.name,
+            maxLength: 30,
+        });
+        if (!result) return;
+        if (!librariesManager.renameLibrary(libraryId, result)) {
+            this.showMessage('重命名失败');
+            return;
+        }
+        this.renderLibraryList();
+        this.updateCurrentLibraryDisplay();
+        this.showMessage('已重命名');
+    }
+
+    async deleteLibraryPrompt(libraryId) {
+        const lib = librariesManager.getLibrary(libraryId);
+        if (!lib) return;
+        if (!confirm(`确定删除词库「${lib.name}」？\n所有该词库的进度和错词将一并清除。`)) {
+            return;
+        }
+        if (!librariesManager.deleteLibrary(libraryId)) {
+            this.showMessage('删除失败');
+            return;
+        }
+        this.renderLibraryList();
+        this.updateCurrentLibraryDisplay();
+        this.showMessage('已删除');
+    }
+
+    async editCurrentLibraryName() {
+        const lib = librariesManager.getCurrentLibrary();
+        if (!lib || lib.isDefault) {
+            this.showMessage('默认词库不可重命名');
+            return;
+        }
+        await this.renameLibraryPrompt(lib.id);
+    }
+
+    // ============================================================
+    // 用户管理
+    // ============================================================
+
+    showUsersManager() {
+        this.renderUserList();
+        this.showScreen('users-screen');
+    }
+
+    renderUserList() {
+        const container = this.elements.userList;
+        if (!container) return;
+        container.innerHTML = '';
+
+        const users = (typeof usersManager !== 'undefined')
+            ? usersManager.listUsers()
+            : [];
+        const currentId = usersManager.getCurrentUserId();
+
+        users.forEach(user => {
+            const card = document.createElement('div');
+            card.className = 'user-card';
+            if (user.id === currentId) card.classList.add('active');
+
+            const lastPlayed = user.lastPlayedAt
+                ? new Date(user.lastPlayedAt).toLocaleString('zh-CN')
+                : '从未';
+
+            card.innerHTML = `
+                <div class="user-card-header">
+                    <div class="user-name">${this._escapeHtml(user.name)}</div>
+                    ${user.id === currentId ? '<div class="user-badge">当前</div>' : ''}
+                </div>
+                <div class="user-card-stats">
+                    <span>🕒 最后游戏：${lastPlayed}</span>
+                </div>
+                <div class="user-card-actions"></div>
+            `;
+
+            const actions = card.querySelector('.user-card-actions');
+
+            if (user.id !== currentId) {
+                const switchBtn = document.createElement('button');
+                switchBtn.className = 'btn-small btn-primary';
+                switchBtn.textContent = '切换';
+                switchBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this.switchUser(user.id);
+                });
+                actions.appendChild(switchBtn);
+            }
+
+            const renameBtn = document.createElement('button');
+            renameBtn.className = 'btn-small btn-secondary';
+            renameBtn.textContent = '重命名';
+            renameBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.renameUserPrompt(user.id);
+            });
+            actions.appendChild(renameBtn);
+
+            if (users.length > 1) {
+                const delBtn = document.createElement('button');
+                delBtn.className = 'btn-small btn-danger';
+                delBtn.textContent = '删除';
+                delBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this.deleteUserPrompt(user.id);
+                });
+                actions.appendChild(delBtn);
+            }
+
+            card.addEventListener('click', () => {
+                if (user.id !== currentId) this.switchUser(user.id);
+            });
+            container.appendChild(card);
+        });
+    }
+
+    switchUser(userId) {
+        if (typeof usersManager === 'undefined') return;
+        if (!usersManager.switchUser(userId)) {
+            this.showMessage('切换失败');
+            return;
+        }
+        // 重置 wordManager（进度按 userId 分桶）
+        if (this.wordManager && this.wordManager.onLibraryChanged) {
+            this.wordManager.onLibraryChanged();
+        }
+        const user = usersManager.getUser(userId);
+        this.showMessage(`已切换到「${user.name}」`);
+        this.renderUserList();
+        this.updateCurrentPlayerDisplay();
+    }
+
+    async createUserPrompt() {
+        const result = await this._promptForText({
+            title: '新建玩家',
+            label: '昵称',
+            placeholder: '例如：Alice / 儿子',
+            maxLength: 20,
+        });
+        if (!result) return;
+        try {
+            const user = await usersManager.createUser(result);
+            if (!user) {
+                this.showMessage('创建失败（名字为空或已存在）');
+                return;
+            }
+            // 切到新档案
+            await usersManager.switchUser(user.id);
+            this.renderUserList();
+            this.updateCurrentPlayerDisplay();
+            this.showMessage(`已创建并切换到「${user.name}」`);
+        } catch (e) {
+            this.showMessage(`创建失败：${e.message || e}`);
+        }
+    }
+
+    async renameUserPrompt(userId) {
+        const user = usersManager.getUser(userId);
+        if (!user) return;
+        const result = await this._promptForText({
+            title: '重命名用户',
+            label: '新昵称',
+            defaultValue: user.name,
+            maxLength: 20,
+        });
+        if (!result) return;
+        if (!usersManager.renameUser(userId, result)) {
+            this.showMessage('重命名失败');
+            return;
+        }
+        this.renderUserList();
+        this.updateCurrentPlayerDisplay();
+    }
+
+    async deleteUserPrompt(userId) {
+        const user = usersManager.getUser(userId);
+        if (!user) return;
+        if (!confirm(`确定删除用户「${user.name}」？\n该用户的全部进度将一并清除。`)) {
+            return;
+        }
+        if (!usersManager.deleteUser(userId)) {
+            this.showMessage('删除失败');
+            return;
+        }
+        this.renderUserList();
+        this.updateCurrentPlayerDisplay();
+        this.showMessage('已删除');
+    }
+
+    // ============================================================
+    // 文件导入（M3 占位，等 M4 后端接上）
+    // ============================================================
+
+    showImport() {
+        // M3：UI 完整，可上传文件，但实际处理需等 M4 后端
+        // 显示当前词库 + 文件选择 + 提示信息
+        const targetEl = document.getElementById('import-target-library');
+        if (targetEl && typeof librariesManager !== 'undefined') {
+            const lib = librariesManager.getCurrentLibrary();
+            targetEl.textContent = lib ? lib.name : '（请先选择词库）';
+        }
+        const statusEl = document.getElementById('import-status');
+        if (statusEl) {
+            statusEl.innerHTML = `
+                <div class="import-hint">
+                    📌 上传 TXT / PDF / DOCX 文件，系统自动提取英语单词 + 查中文释义 + 加入「${librariesManager.getCurrentLibrary()?.name || ''}」+ 生成音频。
+                    <br><br>
+                    <strong>当前支持：</strong>
+                    <ul>
+                        <li>✅ TXT（推荐，纯英文文本）</li>
+                        <li>✅ PDF / DOCX（自动转文本）</li>
+                        <li>⏳ MP3 / 图片（等 ASR/OCR 选型）</li>
+                    </ul>
+                    处理在后台进行，可关闭页面稍后查看进度。
+                </div>
+            `;
+        }
+        // 绑定文件选择事件
+        const fileInput = document.getElementById('import-file-input');
+        if (fileInput && !fileInput.dataset.bound) {
+            fileInput.addEventListener('change', (e) => this.handleFileSelected(e));
+            fileInput.dataset.bound = '1';
+        }
+        const dropZone = document.getElementById('import-drop-zone');
+        if (dropZone && !dropZone.dataset.bound) {
+            dropZone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                dropZone.classList.add('dragover');
+            });
+            dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+            dropZone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                dropZone.classList.remove('dragover');
+                const files = e.dataTransfer.files;
+                if (files.length > 0) {
+                    fileInput.files = files;
+                    this.handleFileSelected({ target: fileInput });
+                }
+            });
+            dropZone.dataset.bound = '1';
+        }
+        const submitBtn = document.getElementById('btn-import-submit');
+        if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.onclick = () => this.uploadFile();
+        }
+
+        this.showScreen('import-screen');
+    }
+
+    handleFileSelected(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+        const info = document.getElementById('import-file-info');
+        if (!info) return;
+        const sizeMB = (file.size / 1024 / 1024).toFixed(2);
+        const isImage = file.type && file.type.startsWith('image/');
+        const icon = isImage ? '🖼️' : '📄';
+        const hint = isImage ? '（将进行 OCR 识别）' : '';
+        info.innerHTML = `
+            <div>${icon} <strong>${this._escapeHtml(file.name)}</strong> ${hint}</div>
+            <div>类型：${this._escapeHtml(file.type || '未知')}</div>
+            <div>大小：${sizeMB} MB</div>
+        `;
+        // 自动启用提交按钮
+        const submitBtn = document.getElementById('btn-import-submit');
+        if (submitBtn) submitBtn.disabled = false;
+    }
+
+    /**
+     * ★ 上传文件到后端 → 触发 5 步 pipeline → 轮询 job 状态
+     */
+    async uploadFile() {
+        const fileInput = document.getElementById('import-file-input');
+        const file = fileInput?.files[0];
+        if (!file) {
+            this._showImportError('请先选择文件');
+            return;
+        }
+
+        const lib = (typeof librariesManager !== 'undefined') ? librariesManager.getCurrentLibrary() : null;
+        if (!lib) {
+            this._showImportError('请先选择目标词库');
+            return;
+        }
+
+        const user = (typeof usersManager !== 'undefined') ? usersManager.getCurrentUser() : null;
+        if (!user) {
+            this._showImportError('请先选择用户');
+            return;
+        }
+
+        const submitBtn = document.getElementById('btn-import-submit');
+        if (submitBtn) {
+            submitBtn.disabled = true;
+            submitBtn.textContent = '⏳ 上传中...';
+        }
+
+        const backendUrl = (typeof window !== 'undefined' && window.MINIMAX_CONFIG?.backendUrl)
+            || 'http://127.0.0.1:8765';
+
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('user_id', user.id);
+        formData.append('target_library_id', lib.id);
+
+        let jobId;
+        try {
+            const resp = await fetch(`${backendUrl}/api/upload`, {
+                method: 'POST',
+                body: formData,
+                headers: authManager.getAuthHeaders(),
+            });
+            if (!resp.ok) {
+                const err = await resp.json().catch(() => ({ detail: resp.statusText }));
+                throw new Error(err.detail || `HTTP ${resp.status}`);
+            }
+            const job = await resp.json();
+            jobId = job.id;
+            this._showImportStatus(`✅ 上传成功！Job ID: ${jobId.slice(0, 8)}... 正在后台处理...`, 'info');
+        } catch (e) {
+            this._showImportError(`上传失败：${e.message}（后端是否在 ${backendUrl} 启动？）`);
+            if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.textContent = '🚀 开始导入';
+            }
+            return;
+        }
+
+        // 轮询 job 状态
+        this._pollJobStatus(jobId, lib.id);
+    }
+
+    async _pollJobStatus(jobId, libraryId) {
+        const backendUrl = (typeof window !== 'undefined' && window.MINIMAX_CONFIG?.backendUrl)
+            || 'http://127.0.0.1:8765';
+        const STAGE_NAMES = {
+            'text_extract': '📄 提取文本',
+            'ocr': '🖼️ 图片识别',
+            'lemma': '🔍 提取单词',
+            'tts': '🔊 生成音频',
+            'done': '✅ 完成',
+        };
+        let attempts = 0;
+        const maxAttempts = 60;  // 60 * 2s = 2 min max
+
+        const poll = async () => {
+            attempts++;
+            try {
+                const resp = await fetch(`${backendUrl}/api/jobs/${jobId}`, {
+                    headers: authManager.getAuthHeaders(),
+                });
+                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+                const job = await resp.json();
+                const stage = STAGE_NAMES[job.current_stage] || job.current_stage || '准备中...';
+                const progress = job.progress || 0;
+                const statusText = job.status === 'completed' ? '✅ 完成'
+                                : job.status === 'failed' ? '❌ 失败'
+                                : `⏳ ${stage}（${progress}%）`;
+
+                const result = job.result || {};
+                let detail = '';
+                if (result.extracted_count !== undefined) {
+                    detail += `<br>提取单词：<strong>${result.extracted_count}</strong>`;
+                }
+                if (result.known_count !== undefined) {
+                    detail += `<br>已识别：<strong>${result.known_count}</strong> / 未识别：<strong>${result.unknown_count || 0}</strong>`;
+                }
+                if (result.added_count !== undefined) {
+                    detail += `<br>加入词库：<strong>${result.added_count}</strong>`;
+                }
+                if (result.tts_generated !== undefined) {
+                    detail += `<br>生成音频：<strong>${result.tts_generated}</strong>`;
+                }
+                if (job.error_message) {
+                    detail += `<br><span style="color:#c00">错误：${this._escapeHtml(job.error_message)}</span>`;
+                }
+
+                this._showImportStatus(`
+                    <div class="import-status-block">
+                        <div class="import-status-main">${statusText}</div>
+                        <div class="import-progress-bar"><div class="import-progress-fill" style="width:${progress}%"></div></div>
+                        <div class="import-status-detail">${detail}</div>
+                    </div>
+                `, 'info');
+
+                if (job.status === 'completed') {
+                    this._onImportCompleted(libraryId);
+                    return;
+                }
+                if (job.status === 'failed') {
+                    this._showImportError(`处理失败：${job.error_message || '未知错误'}`);
+                    return;
+                }
+                if (attempts >= maxAttempts) {
+                    this._showImportError('处理超时，请稍后手动刷新');
+                    return;
+                }
+                setTimeout(poll, 2000);
+            } catch (e) {
+                this._showImportError(`查询进度失败：${e.message}`);
+            }
+        };
+
+        poll();
+    }
+
+    _onImportCompleted(libraryId) {
+        const submitBtn = document.getElementById('btn-import-submit');
+        if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.textContent = '🚀 导入更多';
+        }
+        // 刷新当前词库的单词列表
+        if (typeof librariesManager !== 'undefined') {
+            librariesManager.refreshLibrary(libraryId).then(() => {
+                console.log('[import] 词库已刷新');
+            });
+        }
+    }
+
+    _showImportStatus(html, type = 'info') {
+        const el = document.getElementById('import-status');
+        if (!el) return;
+        el.innerHTML = `<div class="import-status-${type}">${html}</div>`;
+    }
+
+    _showImportError(msg) {
+        this._showImportStatus(`<div style="color:#c00">❌ ${this._escapeHtml(msg)}</div>`, 'error');
+        const submitBtn = document.getElementById('btn-import-submit');
+        if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.textContent = '🚀 开始导入';
+        }
+    }
+
+    // ============================================================
+    // 通用文本输入 modal（用现有 #name-input-modal 复用）
+    // ============================================================
+
+    async _promptForText({ title, label, defaultValue = '', placeholder = '', maxLength = 30 }) {
+        const modal = document.getElementById('name-input-modal');
+        const titleEl = document.getElementById('name-input-title');
+        const labelEl = document.getElementById('name-input-label');
+        const input = document.getElementById('player-name-input');
+        const confirm = document.getElementById('btn-confirm-name');
+        const cancel = document.getElementById('btn-cancel-name');
+        if (!modal || !input || !confirm || !cancel) return null;
+
+        if (titleEl) titleEl.textContent = title || '请输入';
+        if (labelEl) labelEl.textContent = label || '';
+        input.value = defaultValue || '';
+        input.maxLength = maxLength;
+        input.placeholder = placeholder;
+
+        modal.classList.add('active');
+        setTimeout(() => input.focus(), 50);
+
+        return new Promise((resolve) => {
+            const cleanup = () => {
+                modal.classList.remove('active');
+                confirm.removeEventListener('click', onConfirm);
+                cancel.removeEventListener('click', onCancel);
+                input.removeEventListener('keydown', onKey);
+                modal.removeEventListener('click', onBackdrop);
+            };
+            const onConfirm = () => {
+                const v = input.value.trim();
+                if (!v) { input.classList.add('input-error'); return; }
+                cleanup();
+                resolve(v);
+            };
+            const onCancel = () => { cleanup(); resolve(null); };
+            const onKey = (e) => {
+                if (e.key === 'Enter') { e.preventDefault(); onConfirm(); }
+                if (e.key === 'Escape') { e.preventDefault(); onCancel(); }
+                input.classList.remove('input-error');
+            };
+            const onBackdrop = (e) => {
+                if (e.target === modal) onCancel();
+            };
+            confirm.addEventListener('click', onConfirm);
+            cancel.addEventListener('click', onCancel);
+            input.addEventListener('keydown', onKey);
+            input.addEventListener('input', () => input.classList.remove('input-error'));
+            modal.addEventListener('click', onBackdrop);
+        });
     }
 }
 

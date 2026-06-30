@@ -4,11 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>英语单词闯关游戏 - 教育魔法岛</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E📚%3C/text%3E%3C/svg%3E">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Comic+Neue:wght@400;700&family=Quicksand:wght@400;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="css/style.css?v=22">
-    <link rel="stylesheet" href="css/animations.css?v=22">
+    <link rel="stylesheet" href="css/style.css?v=31">
+    <link rel="stylesheet" href="css/animations.css?v=31">
 </head>
 <body>
     <!-- 全局背景装饰（在所有界面显示） -->
@@ -39,6 +40,7 @@
                     <span class="current-player-label">当前玩家：</span>
                     <span id="current-player-name">未设置</span>
                     <button id="btn-edit-name" class="btn-edit-name" type="button">✏️ 修改</button>
+                    <button id="btn-logout" class="btn-edit-name" type="button" title="退出登录">🚪 退出</button>
                 </div>
                 <div class="word-count-setting">
                     <label for="words-per-level">每关需要匹配：</label>
@@ -93,8 +95,16 @@
                         <option value="4">极快</option>
                     </select>
                 </div>
+                <div class="current-library-display" id="current-library-display">
+                    <span class="current-library-label">当前词库：</span>
+                    <span id="current-library-name">加载中...</span>
+                    <button id="btn-edit-library-name" class="btn-edit-name" type="button">✏️</button>
+                </div>
                 <button id="btn-start" class="btn-primary">开始游戏</button>
                 <button id="btn-levels" class="btn-secondary" onclick="console.log('Levels clicked!'); game.showLevelSelect();">选择关卡</button>
+                <button id="btn-vocab" class="btn-secondary">📚 词库管理</button>
+                <button id="btn-import" class="btn-secondary">📤 导入词库</button>
+                <button id="btn-users" class="btn-secondary">👤 用户管理</button>
                 <button id="btn-ranking" class="btn-secondary">🏆 排行榜</button>
                 <button id="btn-about" class="btn-secondary" onclick="console.log('About clicked!'); game.showScreen('about-screen');">游戏说明</button>
 
@@ -283,11 +293,126 @@
             </div>
         </div>
 
+        <!-- ★ 词库管理界面 -->
+        <div id="vocab-screen" class="screen">
+            <div class="vocab-header">
+                <h2>📚 词库管理</h2>
+                <button id="btn-back-from-vocab" class="btn-back">← 返回</button>
+            </div>
+            <div class="vocab-content">
+                <div class="vocab-toolbar">
+                    <button id="btn-create-library" class="btn-primary">+ 新建词库</button>
+                    <p class="vocab-hint">💡 自定义词库每 50 词为一关；可基于已有单词或从文件导入</p>
+                </div>
+                <div class="library-list" id="library-list">
+                    <!-- 动态生成词库卡片 -->
+                </div>
+            </div>
+        </div>
+
+        <!-- ★ 用户管理界面 -->
+        <div id="users-screen" class="screen">
+            <div class="users-header">
+                <h2>👤 用户管理</h2>
+                <button id="btn-back-from-users" class="btn-back">← 返回</button>
+            </div>
+            <div class="users-content">
+                <div class="users-toolbar">
+                    <button id="btn-create-user" class="btn-primary">+ 新建玩家</button>
+                    <p class="users-hint">💡 每个玩家的进度和错词独立；切换玩家不会丢失数据</p>
+                </div>
+                <div class="user-list" id="user-list">
+                    <!-- 动态生成玩家档案卡片 -->
+                </div>
+            </div>
+        </div>
+
+        <!-- ★ 注册/登录界面（task #36） -->
+        <div id="auth-screen" class="screen">
+            <div class="auth-container">
+                <h1 class="auth-title">🎓 教育魔法岛</h1>
+                <p class="auth-tagline">登录开始学习 · 跨设备同步进度</p>
+
+                <div class="auth-tabs">
+                    <button id="auth-tab-login" class="auth-tab active">登录</button>
+                    <button id="auth-tab-register" class="auth-tab">注册</button>
+                </div>
+
+                <form id="auth-form-login" class="auth-form">
+                    <label class="auth-field">
+                        <span>昵称</span>
+                        <input id="auth-login-username" type="text" required minlength="2" maxlength="20"
+                               placeholder="2-20 字符" autocomplete="username">
+                    </label>
+                    <label class="auth-field">
+                        <span>密码</span>
+                        <input id="auth-login-password" type="password" required minlength="6"
+                               placeholder="至少 6 位" autocomplete="current-password">
+                    </label>
+                    <button type="submit" class="btn-primary auth-submit">登录</button>
+                </form>
+
+                <form id="auth-form-register" class="auth-form" hidden>
+                    <label class="auth-field">
+                        <span>昵称</span>
+                        <input id="auth-register-username" type="text" required minlength="2" maxlength="20"
+                               placeholder="2-20 字符" autocomplete="username">
+                    </label>
+                    <label class="auth-field">
+                        <span>密码</span>
+                        <input id="auth-register-password" type="password" required minlength="6"
+                               placeholder="至少 6 位" autocomplete="new-password">
+                    </label>
+                    <label class="auth-field">
+                        <span>确认密码</span>
+                        <input id="auth-register-password-confirm" type="password" required minlength="6"
+                               placeholder="再次输入密码" autocomplete="new-password">
+                    </label>
+                    <button type="submit" class="btn-primary auth-submit">注册并开始</button>
+                </form>
+
+                <div id="auth-error" class="auth-error" hidden></div>
+                <div id="auth-loading" class="auth-loading" hidden>⏳ 正在处理…</div>
+
+                <p class="auth-footer">登录后可在「玩家管理」添加多个玩家档案（家长账号下多个孩子独立进度）</p>
+            </div>
+        </div>
+
+        <!-- ★ 文件导入界面 -->
+        <div id="import-screen" class="screen">
+            <div class="import-header">
+                <h2>📤 导入词库</h2>
+                <button id="btn-back-from-import" class="btn-back">← 返回</button>
+            </div>
+            <div class="import-content">
+                <div class="import-target-info">
+                    <strong>目标词库：</strong><span id="import-target-library">（请先选择）</span>
+                </div>
+                <div id="import-drop-zone" class="import-drop-zone">
+                    <input type="file" id="import-file-input" accept=".mp3,.wav,.m4a,.pdf,.txt,.docx,.png,.jpg,.jpeg,.webp,.bmp" hidden>
+                    <div class="import-drop-hint">
+                        📁 点击选择文件 或 拖拽到此处<br>
+                        <small>支持 MP3 / WAV / M4A / PDF / TXT / DOCX / 🖼️ 图片（OCR 自动识别）— 最大 200MB</small>
+                    </div>
+                </div>
+                <div id="import-file-info" class="import-file-info">
+                    <!-- 文件信息显示 -->
+                </div>
+                <div id="import-status" class="import-status">
+                    <!-- 状态 / 提示信息 -->
+                </div>
+                <div class="import-actions">
+                    <button id="btn-import-submit" class="btn-primary" disabled>🚀 开始导入</button>
+                    <p class="import-wait-hint">⏳ 完整功能需后端 API 支持（研发中）</p>
+                </div>
+            </div>
+        </div>
+
         <!-- 姓名输入弹窗（modal） -->
         <div id="name-input-modal" class="modal">
             <div class="modal-content">
                 <h3 id="name-modal-title">请输入你的名字</h3>
-                <p class="modal-hint">名字将显示在排行榜中</p>
+                <p class="modal-hint" id="name-input-label">名字将显示在排行榜中</p>
                 <input type="text" id="player-name-input" maxlength="20" placeholder="你的名字（最多20字）" autocomplete="off">
                 <div class="modal-buttons">
                     <button id="btn-confirm-name" class="btn-primary">确定</button>
@@ -297,14 +422,17 @@
         </div>
     </div>
 
-    <script src="lib/lottie.min.js?v=22"></script>
-    <script src="js/config.js?v=22"></script>
-    <script src="js/soundManager.js?v=25"></script>
-    <script src="js/animationPlayer.js?v=22"></script>
-    <script src="js/backgroundAnimator.js?v=22"></script>
-    <script src="js/wordManager.js?v=22"></script>
-    <script src="js/collision.js?v=22"></script>
-    <script src="js/game.js?v=27"></script>
-    <script src="js/gamepadController.js?v=22"></script>
+    <script src="lib/lottie.min.js?v=31"></script>
+    <script src="js/config.js?v=31"></script>
+    <script src="js/soundManager.js?v=31"></script>
+    <script src="js/animationPlayer.js?v=31"></script>
+    <script src="js/backgroundAnimator.js?v=31"></script>
+    <script src="js/authManager.js?v=31"></script>
+    <script src="js/usersManager.js?v=31"></script>
+    <script src="js/librariesManager.js?v=31"></script>
+    <script src="js/wordManager.js?v=31"></script>
+    <script src="js/collision.js?v=31"></script>
+    <script src="js/game.js?v=31"></script>
+    <script src="js/gamepadController.js?v=31"></script>
 </body>
 </html>
