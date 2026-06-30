@@ -2342,8 +2342,15 @@ class Game {
             'tts': '🔊 生成音频',
             'done': '✅ 完成',
         };
+        // ★ TD-013：TTS 阶段每词 2 次 API 调用 × ~0.7s/RPM 限流回退
+        // 1000 词约 12 分钟；500 词 + 偶尔 backoff 60s 约 8 分钟。
+        // 原 60*2s=2min 太短，必然超时。把上限提到 30 分钟，并自适应间隔。
+        const maxAttempts = 900;          // 30 分钟上限
+        const fastInterval = 2000;        // 前 60s 每 2s
+        const slowInterval = 5000;        // 之后每 5s 减负
+        const slowAfter = 30;             // 第 30 次（≈60s）后切换
         let attempts = 0;
-        const maxAttempts = 60;  // 60 * 2s = 2 min max
+        const startedAt = Date.now();
 
         const poll = async () => {
             attempts++;
@@ -2355,9 +2362,13 @@ class Game {
                 const job = await resp.json();
                 const stage = STAGE_NAMES[job.current_stage] || job.current_stage || '准备中...';
                 const progress = job.progress || 0;
+                const elapsedSec = Math.floor((Date.now() - startedAt) / 1000);
+                const elapsedStr = elapsedSec >= 60
+                    ? `${Math.floor(elapsedSec / 60)}分${elapsedSec % 60}秒`
+                    : `${elapsedSec}秒`;
                 const statusText = job.status === 'completed' ? '✅ 完成'
                                 : job.status === 'failed' ? '❌ 失败'
-                                : `⏳ ${stage}（${progress}%）`;
+                                : `⏳ ${stage}（${progress}%）· 已等待 ${elapsedStr}`;
 
                 const result = job.result || {};
                 let detail = '';
@@ -2394,10 +2405,13 @@ class Game {
                     return;
                 }
                 if (attempts >= maxAttempts) {
-                    this._showImportError('处理超时，请稍后手动刷新');
+                    // ★ TD-013：30 分钟仍超时 — 真正卡死，给用户手动刷新指引
+                    this._showImportError('处理超时（已等 30 分钟）— 词库后端仍在跑；可刷新页面或在词库管理查看是否已添加');
                     return;
                 }
-                setTimeout(poll, 2000);
+                // 自适应间隔：前 60s 密集，之后放宽
+                const interval = attempts >= slowAfter ? slowInterval : fastInterval;
+                setTimeout(poll, interval);
             } catch (e) {
                 this._showImportError(`查询进度失败：${e.message}`);
             }
