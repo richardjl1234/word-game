@@ -1838,6 +1838,7 @@ class Game {
                 'import:pdf': '📄 PDF 导入',
                 'import:txt': '📝 TXT 导入',
                 'import:docx': '📘 DOCX 导入',
+                'import:image': '🖼️ 图片导入',
             }[lib.source] || lib.source;
 
             const dateStr = lib.createdAt
@@ -2219,8 +2220,11 @@ class Game {
         const info = document.getElementById('import-file-info');
         if (!info) return;
         const sizeMB = (file.size / 1024 / 1024).toFixed(2);
+        const isImage = file.type && file.type.startsWith('image/');
+        const icon = isImage ? '🖼️' : '📄';
+        const hint = isImage ? '（将进行 OCR 识别）' : '';
         info.innerHTML = `
-            <div>📄 <strong>${this._escapeHtml(file.name)}</strong></div>
+            <div>${icon} <strong>${this._escapeHtml(file.name)}</strong> ${hint}</div>
             <div>类型：${this._escapeHtml(file.type || '未知')}</div>
             <div>大小：${sizeMB} MB</div>
         `;
@@ -2298,6 +2302,7 @@ class Game {
             || 'http://127.0.0.1:8765';
         const STAGE_NAMES = {
             'text_extract': '📄 提取文本',
+            'ocr': '🖼️ 图片识别',
             'lemma': '🔍 提取单词',
             'tts': '🔊 生成音频',
             'done': '✅ 完成',

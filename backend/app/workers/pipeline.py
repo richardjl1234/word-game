@@ -76,13 +76,8 @@ def dispatch_pipeline(job_id: str, source_type: str):
             error_message="ASR 引擎未选型（task #13 暂缓），请稍后再试",
         )
     elif source_type == "image":
-        # 占位：等 OCR 选型（task #15）
-        update_job_status(
-            job_id,
-            status=JobStatus.PENDING,
-            current_stage=None,
-            error_message="OCR 引擎未选型（task #15 暂缓），请稍后再试",
-        )
+        # task #15 / task #59：EasyOCR 已选型，走完整 5 步 pipeline
+        run_full_pipeline(job_id, source_type)
     else:
         raise ValueError(f"不支持的 source_type: {source_type}")
 
@@ -90,14 +85,16 @@ def dispatch_pipeline(job_id: str, source_type: str):
 def run_full_pipeline(job_id: str, source_type: str):
     """
     完整 5 步链路：
-    1. text_extract：从 storage 取文件 → 纯文本
+    1. text_extract / OCR：从 storage 取文件 → 纯文本
     2. word_extract：从文本提取英文单词（lemma + 去重）
     3. meaning_lookup：批量查中文释义（来自 words.json 词典）
     4. add_to_library：把单词+meaning 写入目标词库
     5. tts_batch：后台批量生成 mp3（无 API key 时占位）
     """
     try:
-        update_job_status(job_id, status=JobStatus.PROCESSING, current_stage=JobStage.TEXT_EXTRACT, progress=5)
+        # image 类型的第 1 步显示为 OCR stage（前端 STAGE_NAMES['ocr'] = '🖼️ 图片识别'）
+        initial_stage = JobStage.OCR if source_type == "image" else JobStage.TEXT_EXTRACT
+        update_job_status(job_id, status=JobStatus.PROCESSING, current_stage=initial_stage, progress=5)
 
         # 取出 job 的 target_library_id（用于后续 TTS 回填限定范围）
         with _get_session() as db:
@@ -183,7 +180,7 @@ def run_full_pipeline(job_id: str, source_type: str):
 
 def _step_text_extract(job_id: str, source_type: str) -> str | None:
     """从 storage 取文件 → 纯文本"""
-    from .text_extract import _extract_pdf, _extract_docx, _extract_txt
+    from .text_extract import _extract_pdf, _extract_docx, _extract_txt, _extract_image
 
     with _get_session() as db:
         job = db.query(Job).filter(Job.id == job_id).first()
@@ -206,6 +203,8 @@ def _step_text_extract(job_id: str, source_type: str) -> str | None:
             return _extract_docx(content)
         elif source_type == "txt":
             return _extract_txt(content)
+        elif source_type == "image":
+            return _extract_image(content)
         else:
             update_job_status(job_id, status=JobStatus.FAILED, error_message=f"未知 source_type: {source_type}")
             return None

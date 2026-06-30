@@ -43,3 +43,11 @@ tenacity==9.0.0
 passlib[bcrypt]==1.7.4
 bcrypt<5                  # passlib 1.7.4 不兼容 bcrypt 5.x（detect_wrap_bug 自检失败）
 PyJWT==2.8.0
+
+# OCR (task #15 / task #59 — EasyOCR 本地引擎)
+# 锁定 torch 2.5.x + torchvision 0.20.x（新版 torch 与 torchvision 不匹配，
+# 会出现 "operator torchvision::nms does not exist" 错误）
+torch==2.5.1
+torchvision==0.20.1
+easyocr==1.7.2
+# 首次运行时 EasyOCR 自动下载中英双语模型到 ~/.EasyOCR/model/ (~140MB)

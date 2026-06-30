@@ -373,3 +373,43 @@ source /home/richardjl/shared/jianglei/claude/word-game_config.sh
 echo $MINIMAX_API_KEY  # 应有值
 ./start.sh status       # 首行输出 "✅ word-game_config.sh 已加载"
 ```
+
+
+---
+
+## TD-010: EasyOCR 模型大小 + 中英混排弱项（task #15 / task #59）
+
+### 现状
+OCR worker 已用 EasyOCR（本地开源，pip 一行安装，CPU）。首次调用自动下载 ~140MB 模型到 `~/.EasyOCR/model/`。
+
+### 已知局限
+
+1. **模型大小**：en + ch_sim 共 4 个 `.pth` 文件 ≈ 140MB
+   - **影响**：首次部署需联网 + 几分钟下载；CI 环境受限会卡住
+   - **当前缓解**：`_reader_cache` 全局单例，进程只下/载一次
+
+2. **中英混排行聚类错误**（20px 阈值固定）
+   - **影响**：中英文本行高差异大时一行被切成两行；小人字符 / 装饰图标误识别
+   - **当前缓解**：行聚类按 y 坐标差异合并（`ocr_extract.py:LINE_THRESHOLD_PX=20`）
+
+3. **手写体识别弱**
+   - **影响**：用户手写笔记几乎不可用
+   - **未来 work**：若用户报手写需求 → 切到专门模型（TrOCR / PaddleOCR 之类）或云 API
+
+4. **无版面结构化**
+   - **影响**：图片中的"英文 - 中文"配对行只能 OCR 成混合文本，无法精准对齐
+   - **决策**：当前按纯文本走 pipeline（task #59 决策），与 txt/pdf 行为一致
+   - **未来 work**：若用户上传"单词书截图"需要精准配对 → 切 Claude/GPT-4o vision
+
+### 验收
+- ✅ 后端 pytest 88 passed（含 10 个新 OCR 测试）
+- ✅ frontend UI 支持 .png/.jpg/.webp/.bmp
+- ✅ test_e2e_image_upload.js 15/15 通过（OCR pipeline + UI accept + 无 JS 错误）
+
+### 未来工作方向
+**优先级：中**
+
+当 EasyOCR 准确率成为瓶颈时考虑迁移：
+- 候选 1：Claude/GPT-4o vision（结构化 + 中英混排强 + 按图片付费）
+- 候选 2：PaddleOCR（本地开源 + 中文更强 + 依赖重）
+- 候选 3：百度 OCR（云 API + 中文最强 + 按次付费）

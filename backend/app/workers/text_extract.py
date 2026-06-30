@@ -60,6 +60,16 @@ def _extract_txt(data: bytes) -> str:
     return data.decode("utf-8", errors="ignore")
 
 
+def _extract_image(data: bytes) -> str:
+    """OCR 提取图片中的文字（task #15 / task #59）
+
+    使用 EasyOCR（本地引擎），输出与 _extract_pdf/docx/txt 相同的纯文本格式。
+    首次调用会触发模型下载（~140MB，缓存到 ~/.EasyOCR/model/）。
+    """
+    from .ocr_extract import extract_image_sync
+    return extract_image_sync(data)
+
+
 def extract_text_sync(job_id: str) -> str:
     """同步执行文本提取（worker 内部 / 测试可直接调用）"""
     with SessionLocal() as db:
@@ -78,6 +88,8 @@ def extract_text_sync(job_id: str) -> str:
         text = _extract_docx(data)
     elif source_type == "txt":
         text = _extract_txt(data)
+    elif source_type == "image":
+        text = _extract_image(data)
     else:
         raise ValueError(f"不支持的 source_type: {source_type}")
 

@@ -181,3 +181,52 @@ def second_account(client):
         "token": d["token"],
         "headers": {"Authorization": f"Bearer {d['token']}"},
     }
+
+
+# ==================== OCR fixtures（task #59） ====================
+
+@pytest.fixture(scope="session")
+def sample_png_path():
+    """OCR fixture PNG 绝对路径（如果不存在则自动生成）"""
+    import subprocess
+    from pathlib import Path
+    fixture = Path(__file__).parent / "fixtures" / "sample_words.png"
+    if not fixture.exists():
+        gen_script = Path(__file__).parent / "fixtures" / "generate_sample_image.py"
+        subprocess.run([sys.executable, str(gen_script), str(fixture)], check=True)
+    return str(fixture)
+
+
+@pytest.fixture(scope="session")
+def sample_jpg_path():
+    """OCR fixture JPG 绝对路径"""
+    import subprocess
+    from pathlib import Path
+    fixture = Path(__file__).parent / "fixtures" / "sample_words.jpg"
+    if not fixture.exists():
+        gen_script = Path(__file__).parent / "fixtures" / "generate_sample_image.py"
+        subprocess.run([sys.executable, str(gen_script), str(fixture)], check=True)
+    return str(fixture)
+
+
+@pytest.fixture(scope="function")
+def sample_png(sample_png_path):
+    """PNG fixture 字节内容（每次都从磁盘读，避免内存缓存问题）"""
+    return open(sample_png_path, 'rb').read()
+
+
+@pytest.fixture(scope="function")
+def sample_jpg(sample_jpg_path):
+    """JPG fixture 字节内容"""
+    return open(sample_jpg_path, 'rb').read()
+
+
+@pytest.fixture(scope="function")
+def blank_png():
+    """空白图片（OCR 应返回空字符串）"""
+    from io import BytesIO
+    from PIL import Image
+    img = Image.new('RGB', (200, 200), 'white')
+    buf = BytesIO()
+    img.save(buf, format='PNG')
+    return buf.getvalue()

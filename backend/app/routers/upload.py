@@ -30,8 +30,8 @@ ALLOWED_EXTENSIONS = {
     ".pdf": "pdf", ".docx": "docx", ".txt": "txt",
     # 音频（task #13 ASR 选型后扩展）
     ".mp3": "mp3", ".wav": "wav", ".m4a": "m4a",
-    # 图片（task #15 OCR 选型后扩展）
-    ".jpg": "image", ".jpeg": "image", ".png": "image", ".webp": "image",
+    # 图片（OCR 已选型 EasyOCR，task #15 / task #59 完成）
+    ".jpg": "image", ".jpeg": "image", ".png": "image", ".webp": "image", ".bmp": "image",
 }
 
 
