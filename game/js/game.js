@@ -141,12 +141,9 @@ class Game {
         };
     }
 
-    /** task #36：注册 auth-screen 的 tab + 表单事件 */
+    /** ★ task #72：仅登录（注册已改为 admin-only） */
     _setupAuthScreen() {
-        const tabLogin = document.getElementById('auth-tab-login');
-        const tabRegister = document.getElementById('auth-tab-register');
         const formLogin = document.getElementById('auth-form-login');
-        const formRegister = document.getElementById('auth-form-register');
         const errEl = document.getElementById('auth-error');
         const loadingEl = document.getElementById('auth-loading');
 
@@ -157,20 +154,9 @@ class Game {
         };
         const setLoading = (on) => {
             if (loadingEl) loadingEl.hidden = !on;
-            formLogin.querySelector('button[type=submit]').disabled = !!on;
-            formRegister.querySelector('button[type=submit]').disabled = !!on;
+            const btn = formLogin?.querySelector('button[type=submit]');
+            if (btn) btn.disabled = !!on;
         };
-
-        const switchTab = (tab) => {
-            const isLogin = tab === 'login';
-            tabLogin.classList.toggle('active', isLogin);
-            tabRegister.classList.toggle('active', !isLogin);
-            formLogin.hidden = !isLogin;
-            formRegister.hidden = isLogin;
-            showError('');
-        };
-        tabLogin?.addEventListener('click', () => switchTab('login'));
-        tabRegister?.addEventListener('click', () => switchTab('register'));
 
         const handleSuccess = async (resp) => {
             authManager._saveSession(resp);
@@ -194,33 +180,14 @@ class Game {
                 setLoading(false);
             }
         });
-
-        formRegister?.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            showError('');
-            const username = document.getElementById('auth-register-username').value.trim();
-            const password = document.getElementById('auth-register-password').value;
-            const confirm = document.getElementById('auth-register-password-confirm').value;
-            if (!username || !password) return;
-            if (password !== confirm) {
-                showError('两次密码不一致');
-                return;
-            }
-            setLoading(true);
-            try {
-                const resp = await authManager.register(username, password);
-                await handleSuccess(resp);
-            } catch (err) {
-                showError(err.message || '注册失败');
-                setLoading(false);
-            }
-        });
     }
 
     /** ★ task #72：强制改密模态框（admin 创建的用户首次登录必须改密） */
     _setupPasswordChangeModal() {
         const modal = document.getElementById('password-change-modal');
         if (!modal) return;
+        // 先清除所有屏幕的 active 状态
+        Object.values(this.screens).forEach(s => { if (s) s.classList.remove('active'); });
         modal.classList.add('active');
 
         const currentInput = document.getElementById('pwd-change-current');

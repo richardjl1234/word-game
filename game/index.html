@@ -8,8 +8,8 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Comic+Neue:wght@400;700&family=Quicksand:wght@400;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="css/style.css?v=34">
-    <link rel="stylesheet" href="css/animations.css?v=34">
+    <link rel="stylesheet" href="css/style.css?v=35">
+    <link rel="stylesheet" href="css/animations.css?v=35">
 </head>
 <body>
     <!-- 全局背景装饰（在所有界面显示） -->
@@ -327,7 +327,7 @@
             </div>
         </div>
 
-        <!-- ★ 注册/登录界面（task #36） -->
+        <!-- ★ 登录界面（注册已改为 admin-only，仅留登录） -->
         <div id="auth-screen" class="screen">
             <div class="auth-container">
                 <h1 class="auth-title">🎓 教育魔法岛</h1>
@@ -335,7 +335,6 @@
 
                 <div class="auth-tabs">
                     <button id="auth-tab-login" class="auth-tab active">登录</button>
-                    <button id="auth-tab-register" class="auth-tab">注册</button>
                 </div>
 
                 <form id="auth-form-login" class="auth-form">
@@ -352,29 +351,12 @@
                     <button type="submit" class="btn-primary auth-submit">登录</button>
                 </form>
 
-                <form id="auth-form-register" class="auth-form" hidden>
-                    <label class="auth-field">
-                        <span>昵称</span>
-                        <input id="auth-register-username" type="text" required minlength="2" maxlength="20"
-                               placeholder="2-20 字符" autocomplete="username">
-                    </label>
-                    <label class="auth-field">
-                        <span>密码</span>
-                        <input id="auth-register-password" type="password" required minlength="6"
-                               placeholder="至少 6 位" autocomplete="new-password">
-                    </label>
-                    <label class="auth-field">
-                        <span>确认密码</span>
-                        <input id="auth-register-password-confirm" type="password" required minlength="6"
-                               placeholder="再次输入密码" autocomplete="new-password">
-                    </label>
-                    <button type="submit" class="btn-primary auth-submit">注册并开始</button>
                 </form>
 
                 <div id="auth-error" class="auth-error" hidden></div>
                 <div id="auth-loading" class="auth-loading" hidden>⏳ 正在处理…</div>
 
-                <p class="auth-footer">登录后可在「玩家管理」添加多个玩家档案（家长账号下多个孩子独立进度）</p>
+                <p class="auth-footer">管理员创建的账号首次登录后需修改密码（默认密码 1234）</p>
             </div>
         </div>
 
@@ -431,23 +413,18 @@
                 <input type="password" id="pwd-change-confirm" placeholder="确认新密码" autocomplete="new-password">
                 <div class="modal-buttons">
                     <button id="btn-confirm-password-change" class="btn-primary">确认修改</button>
-                </div>
-                <div id="pwd-change-error" class="auth-error" hidden></div>
-            </div>
-        </div>
-    </div>
 
-    <script src="lib/lottie.min.js?v=34"></script>
-    <script src="js/config.js?v=34"></script>
-    <script src="js/soundManager.js?v=34"></script>
-    <script src="js/animationPlayer.js?v=34"></script>
-    <script src="js/backgroundAnimator.js?v=34"></script>
-    <script src="js/authManager.js?v=34"></script>
-    <script src="js/usersManager.js?v=34"></script>
-    <script src="js/librariesManager.js?v=34"></script>
-    <script src="js/wordManager.js?v=34"></script>
-    <script src="js/collision.js?v=34"></script>
-    <script src="js/game.js?v=34"></script>
-    <script src="js/gamepadController.js?v=34"></script>
+    <script src="lib/lottie.min.js?v=35"></script>
+    <script src="js/config.js?v=35"></script>
+    <script src="js/soundManager.js?v=35"></script>
+    <script src="js/animationPlayer.js?v=35"></script>
+    <script src="js/backgroundAnimator.js?v=35"></script>
+    <script src="js/authManager.js?v=35"></script>
+    <script src="js/usersManager.js?v=35"></script>
+    <script src="js/librariesManager.js?v=35"></script>
+    <script src="js/wordManager.js?v=35"></script>
+    <script src="js/collision.js?v=35"></script>
+    <script src="js/game.js?v=35"></script>
+    <script src="js/gamepadController.js?v=35"></script>
 </body>
 </html>
