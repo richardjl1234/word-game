@@ -443,3 +443,85 @@ LAN_IP=$(hostname -I | awk '{print $1}')
 curl -s http://$LAN_IP:8765/api/health  # 应返 status=ok
 # Playwright 跑 /tmp/test_lan_e2e_v2.js  # 6/6 通过
 ```
+
+
+---
+
+## TD-012: 手柄在 vocab/users/import 失效 + 无通用返回（task #69）
+
+### 现状
+用户报：从主页可手柄进 词库管理 / 用户管理 / 导入词库 等子界面，但进去后手柄**完全无效**，且无任何返回键回到主页。
+
+### 根因（2 处）
+1. **`updateFocusableButtons` 没为这些子界面定义 selector**：
+   原代码 `switch` 里只覆盖 start / ranking / level-select / about / pause / win / gameover。
+   vocab / users / import 三个子界面**根本没被收集进 `focusableButtons`**，
+   → D-pad 在这些界面无元素可聚焦、A 键也就没有可触发对象。
+2. **B 键 / Select 键的 back handler 写死 specific screens**：
+   ```js
+   if (this.currentScreen === 'level-select-screen' || this.currentScreen === 'about-screen')
+       this.showScreen('start-screen');
+   ```
+   vocab / users / import / ranking 等都被遗漏，按 B 无反应。
+
+### 修复
+1. **`updateFocusableButtons`** 加 3 个 case（vocab / users / import），selector 包含
+   `.btn-back` + `.btn-primary` + `.library-card` / `.user-card`。
+2. **新增 `_gamepadBackToStart()` helper**：查 `#${currentScreen} .btn-back` 可见就 click，
+   否则兜底 `showScreen('start-screen')`。**未来新子界面只要带 `.btn-back` 即可手柄返回**，
+   不必再改 game.js。
+3. **B 键 / Select 键 handler**：把 specific-screen 替换成 `_gamepadBackToStart()`。
+4. **filter 增加 `!b.disabled`**：避免把 disabled 的 btn-import-submit 列入可聚焦。
+
+### 验证
+- ✅ test_gamepad_navigation.js 新增 27/27 通过：
+  - 6 个子界面（vocab/users/import/ranking/level-select/about）手柄 A 键进入 + B 键返回
+  - Select 键（button 8）也支持返回
+  - 每个子界面 focusableButtons 都含 .btn-back
+- ✅ 其他 E2E 无回归（backend 16 / auth 11 / libraries 21 / image_upload 15 等）
+
+### 已知未覆盖（next steps）
+**优先级：低**
+
+- `.library-card` / `.user-card` 卡片内操作（编辑/删除）的手柄聚焦：当前只加进 selector，
+  卡片内子按钮是否响应手柄还没单独测；如有需求再细化
+- 拖拽上传（import drop zone）：手柄不可拖，OK 跳过
+
+
+---
+
+## TD-013: 导入词库 TTS 阶段前端轮询超时（task #71）
+
+### 现状
+用户报：导入 ≥100 词的 txt/pdf/docx/image 2 分钟后报
+"处理超时，请稍后手动刷新"。
+但后端实际仍在跑（甚至会完成入库），前端却已显示超时 → 用户体验差 + 易误判失败。
+
+### 根因
+- 前端 `_pollJobStatus` 写死 `maxAttempts=60` × `setTimeout(poll, 2000)` = **2 分钟硬超时**
+- TTS 阶段每词 2 次 API 调用（en + zh）≈ 0.7s/次，500 词 ≈ 12 分钟
+- 偶尔遇到 `backoff 60s`（rate limit）→ 时间翻倍
+- 实际上 text_extract/word_extract/meaning_lookup/add_to_library 都 < 1s，
+  时间几乎全花在 TTS。原 2 分钟对 ≥50 词必然超时
+
+### 修复（commit pending）
+1. `maxAttempts` 60 → **900**（30 分钟上限）
+2. **自适应轮询间隔**：前 60s 每 2s，之后每 5s（减小服务器压力）
+3. **显示已等待时长**：status 文案从 `⏳ TTS（70%）` 改为
+   `⏳ TTS（70%）· 已等待 3分15秒`，让用户知道进度活着
+4. 30 分钟真超时文案改为：
+   `处理超时（已等 30 分钟）— 词库后端仍在跑；可刷新页面或在词库管理查看是否已添加`
+   提示用户词库可能实际已添加完成
+
+### 已知未覆盖
+**优先级：低**
+
+- 后端 TTS 串行调用（约 0.7s/词 × 2）仍是瓶颈；
+  长期应改成并发 + 限流（参考 generate_voices.py 的 5 并发模式）
+- 真正 30 分钟仍超时应允许用户主动 "停止等待"按钮
+  （当前只能刷页面；不过刷页面后无 resume 机制）
+
+### 验证
+- Playwright 跑 `test_e2e_ingest.js`：T3 偶发 flaky（TD-008）；
+  提 timeout 不影响该测试本身的轮询计时
+- 手动测 200 词 txt 导入应不再 2 分钟超时

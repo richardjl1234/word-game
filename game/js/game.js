@@ -1183,13 +1183,16 @@ class Game {
         }
         if (this.gamepadController.consumeMenu()) {
             if (this.currentScreen === 'game-screen') this.quitGame();
-            else if (this.currentScreen === 'level-select-screen' || this.currentScreen === 'about-screen') this.showScreen('start-screen');
+            // ★ 手柄修复（TD-012）：Select 键（8）通用返回 — 任何子界面 → start
+            else this._gamepadBackToStart();
         }
         if (this.gamepadController.consumeBack()) {
-            // B 键：游戏内退出，菜单中返回
+            // B 键：游戏内退出，菜单中返回，暂停中退出暂停
             if (this.currentScreen === 'game-screen') this.quitGame();
-            else if (this.currentScreen === 'level-select-screen' || this.currentScreen === 'about-screen') this.showScreen('start-screen');
             else if (this.currentScreen === 'pause-screen') this.togglePause();  // 退出暂停
+            // ★ TD-012：通用返回 — vocab / users / import / ranking / level-select / about
+            // 都通过 .btn-back 返回 start-screen
+            else this._gamepadBackToStart();
         }
 
         // 游戏中：单词焦点导航
@@ -1252,6 +1255,25 @@ class Game {
             } else {
                 focused.click();
             }
+        }
+    }
+
+    /**
+     * ★ 手柄通用返回（TD-012）：所有子界面共用同一逻辑
+     * 1) 优先点击当前屏幕可见的 .btn-back（委托给现有 click handler）
+     * 2) 兜底直接 showScreen('start-screen')
+     * 避免在每个 case 里重复写 showScreen('start-screen')，
+     * 新增子页面只要带 .btn-back 即可手柄返回
+     */
+    _gamepadBackToStart() {
+        const back = document.querySelector(`#${this.currentScreen} .btn-back`);
+        if (back && back.offsetParent !== null) {
+            back.click();
+            return;
+        }
+        // 兜底：没有任何 .btn-back 的子界面，直接跳 start
+        if (this.currentScreen !== 'start-screen') {
+            this.showScreen('start-screen');
         }
     }
 
@@ -1365,6 +1387,18 @@ class Game {
             case 'about-screen':
                 selector = '#about-screen .btn-back';
                 break;
+            // ★ 手柄修复（TD-012）：vocab/users/import 之前完全没加 selector，
+            //   导致 gamepad 在这些页面 D-pad 没反应、A/B 也无效。
+            case 'vocab-screen':
+                selector = '#vocab-screen .btn-back, #vocab-screen .btn-primary, #vocab-screen .library-card';
+                break;
+            case 'users-screen':
+                selector = '#users-screen .btn-back, #users-screen .btn-primary, #users-screen .user-card';
+                break;
+            case 'import-screen':
+                // btn-import-submit 在没选文件时是 disabled，filter 时跳过
+                selector = '#import-screen .btn-back, #import-screen .btn-primary';
+                break;
             case 'pause-screen':
                 selector = '#pause-screen .btn-primary, #pause-screen .btn-secondary';
                 break;
@@ -1380,7 +1414,8 @@ class Game {
                 return;
         }
         const btns = Array.from(document.querySelectorAll(selector))
-            .filter(b => b.offsetParent !== null);  // 只保留可见按钮
+            .filter(b => b.offsetParent !== null)        // 只保留可见按钮
+            .filter(b => !b.disabled && b.getAttribute('aria-disabled') !== 'true');  // 跳过禁用
         // 按 selector 顺序排序（querySelectorAll 按 DOM 顺序，但 selector 用逗号分隔时也按 DOM）
         // 对 start-screen 我们希望 stepper → 主按钮 → 次要按钮 的顺序
         if (this.currentScreen === 'start-screen') {
@@ -2307,8 +2342,15 @@ class Game {
             'tts': '🔊 生成音频',
             'done': '✅ 完成',
         };
+        // ★ TD-013：TTS 阶段每词 2 次 API 调用 × ~0.7s/RPM 限流回退
+        // 1000 词约 12 分钟；500 词 + 偶尔 backoff 60s 约 8 分钟。
+        // 原 60*2s=2min 太短，必然超时。把上限提到 30 分钟，并自适应间隔。
+        const maxAttempts = 900;          // 30 分钟上限
+        const fastInterval = 2000;        // 前 60s 每 2s
+        const slowInterval = 5000;        // 之后每 5s 减负
+        const slowAfter = 30;             // 第 30 次（≈60s）后切换
         let attempts = 0;
-        const maxAttempts = 60;  // 60 * 2s = 2 min max
+        const startedAt = Date.now();
 
         const poll = async () => {
             attempts++;
@@ -2320,9 +2362,13 @@ class Game {
                 const job = await resp.json();
                 const stage = STAGE_NAMES[job.current_stage] || job.current_stage || '准备中...';
                 const progress = job.progress || 0;
+                const elapsedSec = Math.floor((Date.now() - startedAt) / 1000);
+                const elapsedStr = elapsedSec >= 60
+                    ? `${Math.floor(elapsedSec / 60)}分${elapsedSec % 60}秒`
+                    : `${elapsedSec}秒`;
                 const statusText = job.status === 'completed' ? '✅ 完成'
                                 : job.status === 'failed' ? '❌ 失败'
-                                : `⏳ ${stage}（${progress}%）`;
+                                : `⏳ ${stage}（${progress}%）· 已等待 ${elapsedStr}`;
 
                 const result = job.result || {};
                 let detail = '';
@@ -2359,10 +2405,13 @@ class Game {
                     return;
                 }
                 if (attempts >= maxAttempts) {
-                    this._showImportError('处理超时，请稍后手动刷新');
+                    // ★ TD-013：30 分钟仍超时 — 真正卡死，给用户手动刷新指引
+                    this._showImportError('处理超时（已等 30 分钟）— 词库后端仍在跑；可刷新页面或在词库管理查看是否已添加');
                     return;
                 }
-                setTimeout(poll, 2000);
+                // 自适应间隔：前 60s 密集，之后放宽
+                const interval = attempts >= slowAfter ? slowInterval : fastInterval;
+                setTimeout(poll, interval);
             } catch (e) {
                 this._showImportError(`查询进度失败：${e.message}`);
             }
