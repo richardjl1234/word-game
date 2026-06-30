@@ -1,0 +1,46 @@
+/* ============================================================ */
+/* ★ theme.css — 集中管理设计 Token                              */
+/* 颜色、字体、间距、圆角、阴影                                  */
+/* 引入顺序：先于 style.css（style.css 中的变量作为 fallback）  */
+/* ============================================================ */
+
+:root {
+    /* ===== 字体栈 ===== */
+    --font-primary: 'Quicksand', 'Comic Neue', 'Comic Sans MS', sans-serif;
+    --font-display: 'Quicksand', 'Comic Neue', sans-serif;
+
+    /* ===== 字体大小层级（管理页） ===== */
+    --text-xs: 0.75rem;      /* badge、辅助文字 */
+    --text-sm: 0.85rem;      /* 提示文字、hint */
+    --text-base: 0.95rem;    /* 正文、统计 */
+    --text-lg: 1.05rem;      /* 卡片二级标题、按钮 */
+    --text-xl: 1.2rem;       /* 卡片主标题 */
+    --text-2xl: 1.4rem;      /* 页面标题 */
+    --text-3xl: 1.6rem;      /* 弹窗标题 */
+
+    /* ===== 间距 ===== */
+    --space-xs: 4px;
+    --space-sm: 8px;
+    --space-md: 12px;
+    --space-lg: 16px;
+    --space-xl: 20px;
+    --space-2xl: 24px;
+    --space-3xl: 32px;
+
+    /* ===== 圆角 ===== */
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 16px;
+    --radius-xl: 20px;
+    --radius-full: 999px;
+
+    /* ===== 阴影 ===== */
+    --shadow-card: 0 2px 8px rgba(0,0,0,0.08);
+    --shadow-hover: 0 6px 20px rgba(0,0,0,0.12);
+
+    /* ===== 管理页专用 ===== */
+    --mgmt-header-bg: linear-gradient(90deg, rgba(255,107,53,0.08), rgba(247,201,72,0.12));
+    --mgmt-card-bg: rgba(255,255,255,0.92);
+    --mgmt-card-border-left: 4px;
+    --mgmt-divider-color: rgba(0,0,0,0.06);
+}

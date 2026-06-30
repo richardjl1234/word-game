@@ -8,8 +8,9 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Comic+Neue:wght@400;700&family=Quicksand:wght@400;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="css/style.css?v=37">
-    <link rel="stylesheet" href="css/animations.css?v=37">
+    <link rel="stylesheet" href="css/theme.css?v=38">
+    <link rel="stylesheet" href="css/style.css?v=38">
+    <link rel="stylesheet" href="css/animations.css?v=38">
 </head>
 <body>
     <!-- 全局背景装饰（在所有界面显示） -->
@@ -29,124 +30,141 @@
     </div>
 
     <div id="game-container">
-        <!-- 开始界面 -->
+        <!-- ★ 主页 / 开始界面（两栏布局） -->
         <div id="start-screen" class="screen active">
             <div class="title-container">
                 <h1 class="game-title">🌟 教育魔法岛 🌟</h1>
                 <h2 class="game-subtitle">英语单词闯关挑战</h2>
             </div>
-            <div class="start-buttons">
-                <div class="current-player-display" id="current-player-display">
-                    <span class="current-player-label">当前玩家：</span>
-                    <span id="current-player-name">未设置</span>
-                    <button id="btn-edit-name" class="btn-edit-name" type="button">✏️ 修改</button>
-                    <button id="btn-logout" class="btn-edit-name" type="button" title="退出登录">🚪 退出</button>
-                </div>
-                <div class="word-count-setting">
-                    <label for="words-per-level">每关需要匹配：</label>
-                    <div class="setting-stepper" id="stepper-words-per-level" data-target="words-per-level">
-                        <button type="button" class="stepper-arrow stepper-prev" data-step="-1" tabindex="-1" aria-label="上一个选项">◀</button>
-                        <span class="stepper-value" id="display-words-per-level" aria-live="polite">25 个单词</span>
-                        <button type="button" class="stepper-arrow stepper-next" data-step="1" tabindex="-1" aria-label="下一个选项">▶</button>
-                    </div>
-                    <select id="words-per-level" class="visually-hidden" tabindex="-1" aria-hidden="true">
-                        <option value="10">10 个单词</option>
-                        <option value="15">15 个单词</option>
-                        <option value="20">20 个单词</option>
-                        <option value="25" selected>25 个单词</option>
-                        <option value="30">30 个单词</option>
-                        <option value="40">40 个单词</option>
-                        <option value="50">50 个单词</option>
-                    </select>
-                </div>
-                <div class="word-count-setting">
-                    <label for="lives-count">生命次数：</label>
-                    <div class="setting-stepper" id="stepper-lives-count" data-target="lives-count">
-                        <button type="button" class="stepper-arrow stepper-prev" data-step="-1" tabindex="-1" aria-label="上一个选项">◀</button>
-                        <span class="stepper-value" id="display-lives-count" aria-live="polite">100 次</span>
-                        <button type="button" class="stepper-arrow stepper-next" data-step="1" tabindex="-1" aria-label="下一个选项">▶</button>
-                    </div>
-                    <select id="lives-count" class="visually-hidden" tabindex="-1" aria-hidden="true">
-                        <option value="1">1 次</option>
-                        <option value="3">3 次</option>
-                        <option value="5">5 次</option>
-                        <option value="10">10 次</option>
-                        <option value="20">20 次</option>
-                        <option value="50">50 次</option>
-                        <option value="100" selected>100 次</option>
-                        <option value="999">无限</option>
-                    </select>
-                </div>
-                <div class="word-count-setting">
-                    <label for="speed-setting">下落速度：</label>
-                    <div class="setting-stepper" id="stepper-speed-setting" data-target="speed-setting">
-                        <button type="button" class="stepper-arrow stepper-prev" data-step="-1" tabindex="-1" aria-label="上一个选项">◀</button>
-                        <span class="stepper-value" id="display-speed-setting" aria-live="polite">正常</span>
-                        <button type="button" class="stepper-arrow stepper-next" data-step="1" tabindex="-1" aria-label="下一个选项">▶</button>
-                    </div>
-                    <select id="speed-setting" class="visually-hidden" tabindex="-1" aria-hidden="true">
-                        <option value="0.25">极慢</option>
-                        <option value="0.5">很慢</option>
-                        <option value="0.75">慢速</option>
-                        <option value="1" selected>正常</option>
-                        <option value="1.5">中快</option>
-                        <option value="2">快速</option>
-                        <option value="3">很快</option>
-                        <option value="4">极快</option>
-                    </select>
-                </div>
-                <div class="current-library-display" id="current-library-display">
-                    <span class="current-library-label">当前词库：</span>
-                    <span id="current-library-name">加载中...</span>
-                    <button id="btn-edit-library-name" class="btn-edit-name" type="button">✏️</button>
-                </div>
-                <button id="btn-start" class="btn-primary">开始游戏</button>
-                <button id="btn-levels" class="btn-secondary" onclick="console.log('Levels clicked!'); game.showLevelSelect();">选择关卡</button>
-                <button id="btn-vocab" class="btn-secondary">📚 词库管理</button>
-                <button id="btn-import" class="btn-secondary">📤 导入词库</button>
-                <button id="btn-users" class="btn-secondary">👤 用户管理</button>
-                <button id="btn-ranking" class="btn-secondary">🏆 排行榜</button>
-                <button id="btn-about" class="btn-secondary" onclick="console.log('About clicked!'); game.showScreen('about-screen');">游戏说明</button>
 
-                <!-- 语音设置（折叠面板） -->
-                <details class="voice-settings-panel">
-                    <summary>🎙️ 语音设置</summary>
-                    <div class="voice-settings-body">
-                        <label>
-                            <span>英文音色</span>
-                            <select id="voice-en">
-                                <option value="English_LovelyGirl">English_LovelyGirl（可爱女童）</option>
-                                <option value="English_radiant_girl">English_radiant_girl（活泼女童）</option>
-                                <option value="English_AnimeCharacter">English_AnimeCharacter（动漫角色）</option>
-                                <option value="English_PassionateWarrior">English_PassionateWarrior（热血少年）</option>
-                            </select>
-                        </label>
-                        <label>
-                            <span>中文音色</span>
-                            <select id="voice-zh">
-                                <option value="Chinese (Mandarin)_Cute_Spirit">Cute_Spirit（可爱灵气）</option>
-                                <option value="Chinese (Mandarin)_Warm_Bestie">Warm_Bestie（温暖闺蜜）</option>
-                                <option value="Chinese (Mandarin)_HK_Flight_Attendant">HK_Flight_Attendant（港式空姐）</option>
-                                <option value="Chinese (Mandarin)_Sweet_Lady">Sweet_Lady（甜美女声）</option>
-                            </select>
-                        </label>
-                        <label>
-                            <span>语速 <em id="val-speed">0.85</em></span>
-                            <input type="range" id="voice-speed" min="0.5" max="1.5" step="0.05" value="0.85">
-                        </label>
-                        <label>
-                            <span>音调 <em id="val-pitch">+2</em></span>
-                            <input type="range" id="voice-pitch" min="-5" max="5" step="1" value="2">
-                        </label>
-                        <label>
-                            <span>音量 <em id="val-vol">100%</em></span>
-                            <input type="range" id="voice-vol" min="0" max="1" step="0.1" value="1.0">
-                        </label>
-                        <button type="button" id="btn-voice-preview">🔊 试听当前配置</button>
-                        <p class="voice-hint">⚠️ 改动音色/语速/音调后需重新生成音频才生效：<br><code>python3 generate_voices.py --force</code></p>
+            <!-- 两栏主布局 -->
+            <div class="home-layout">
+                <!-- 左栏：玩家信息 + 词库信息 -->
+                <div class="home-panel-left">
+                    <div class="current-player-display" id="current-player-display">
+                        <span class="current-player-label">👤 当前玩家：</span>
+                        <span id="current-player-name">未设置</span>
+                        <button id="btn-edit-name" class="btn-edit-name" type="button">✏️ 修改</button>
+                        <button id="btn-logout" class="btn-edit-name" type="button" title="退出登录">🚪</button>
                     </div>
-                </details>
+                    <div class="current-library-display" id="current-library-display">
+                        <span class="current-library-label">📚 当前词库：</span>
+                        <span id="current-library-name">加载中...</span>
+                        <button id="btn-edit-library-name" class="btn-edit-name" type="button">✏️</button>
+                    </div>
+                </div>
+
+                <!-- 右栏：游戏设置 -->
+                <div class="home-panel-right">
+                    <div class="word-count-setting">
+                        <label for="words-per-level">📝 每关需要匹配：</label>
+                        <div class="setting-stepper" id="stepper-words-per-level" data-target="words-per-level">
+                            <button type="button" class="stepper-arrow stepper-prev" data-step="-1" tabindex="-1" aria-label="上一个选项">◀</button>
+                            <span class="stepper-value" id="display-words-per-level" aria-live="polite">25 个单词</span>
+                            <button type="button" class="stepper-arrow stepper-next" data-step="1" tabindex="-1" aria-label="下一个选项">▶</button>
+                        </div>
+                        <select id="words-per-level" class="visually-hidden" tabindex="-1" aria-hidden="true">
+                            <option value="10">10 个单词</option>
+                            <option value="15">15 个单词</option>
+                            <option value="20">20 个单词</option>
+                            <option value="25" selected>25 个单词</option>
+                            <option value="30">30 个单词</option>
+                            <option value="40">40 个单词</option>
+                            <option value="50">50 个单词</option>
+                        </select>
+                    </div>
+                    <div class="word-count-setting">
+                        <label for="lives-count">❤️ 生命次数：</label>
+                        <div class="setting-stepper" id="stepper-lives-count" data-target="lives-count">
+                            <button type="button" class="stepper-arrow stepper-prev" data-step="-1" tabindex="-1" aria-label="上一个选项">◀</button>
+                            <span class="stepper-value" id="display-lives-count" aria-live="polite">100 次</span>
+                            <button type="button" class="stepper-arrow stepper-next" data-step="1" tabindex="-1" aria-label="下一个选项">▶</button>
+                        </div>
+                        <select id="lives-count" class="visually-hidden" tabindex="-1" aria-hidden="true">
+                            <option value="1">1 次</option>
+                            <option value="3">3 次</option>
+                            <option value="5">5 次</option>
+                            <option value="10">10 次</option>
+                            <option value="20">20 次</option>
+                            <option value="50">50 次</option>
+                            <option value="100" selected>100 次</option>
+                            <option value="999">无限</option>
+                        </select>
+                    </div>
+                    <div class="word-count-setting">
+                        <label for="speed-setting">🚀 下落速度：</label>
+                        <div class="setting-stepper" id="stepper-speed-setting" data-target="speed-setting">
+                            <button type="button" class="stepper-arrow stepper-prev" data-step="-1" tabindex="-1" aria-label="上一个选项">◀</button>
+                            <span class="stepper-value" id="display-speed-setting" aria-live="polite">正常</span>
+                            <button type="button" class="stepper-arrow stepper-next" data-step="1" tabindex="-1" aria-label="下一个选项">▶</button>
+                        </div>
+                        <select id="speed-setting" class="visually-hidden" tabindex="-1" aria-hidden="true">
+                            <option value="0.25">极慢</option>
+                            <option value="0.5">很慢</option>
+                            <option value="0.75">慢速</option>
+                            <option value="1" selected>正常</option>
+                            <option value="1.5">中快</option>
+                            <option value="2">快速</option>
+                            <option value="3">很快</option>
+                            <option value="4">极快</option>
+                        </select>
+                    </div>
+                </div>
             </div>
+
+            <!-- 开始游戏按钮（独占一行，大号突出） -->
+            <div class="home-start-row">
+                <button id="btn-start" class="btn-primary btn-start-large">🎮 开始游戏</button>
+            </div>
+
+            <!-- 按钮网格 -->
+            <div class="home-button-grid">
+                <button id="btn-levels" class="btn-secondary" onclick="console.log('Levels clicked!'); game.showLevelSelect();">🗺️ 选择关卡</button>
+                <button id="btn-ranking" class="btn-secondary">🏆 排行榜</button>
+                <button id="btn-about" class="btn-secondary" onclick="console.log('About clicked!'); game.showScreen('about-screen');">📖 游戏说明</button>
+                <button id="btn-vocab" class="btn-secondary">📚 词库管理</button>
+                <button id="btn-import" class="btn-secondary">📥 导入词库</button>
+                <button id="btn-users" class="btn-secondary">👥 用户管理</button>
+            </div>
+
+            <!-- 语音设置（折叠面板） -->
+            <details class="voice-settings-panel">
+                <summary>🎙️ 语音设置</summary>
+                <div class="voice-settings-body">
+                    <label>
+                        <span>英文音色</span>
+                        <select id="voice-en">
+                            <option value="English_LovelyGirl">English_LovelyGirl（可爱女童）</option>
+                            <option value="English_radiant_girl">English_radiant_girl（活泼女童）</option>
+                            <option value="English_AnimeCharacter">English_AnimeCharacter（动漫角色）</option>
+                            <option value="English_PassionateWarrior">English_PassionateWarrior（热血少年）</option>
+                        </select>
+                    </label>
+                    <label>
+                        <span>中文音色</span>
+                        <select id="voice-zh">
+                            <option value="Chinese (Mandarin)_Cute_Spirit">Cute_Spirit（可爱灵气）</option>
+                            <option value="Chinese (Mandarin)_Warm_Bestie">Warm_Bestie（温暖闺蜜）</option>
+                            <option value="Chinese (Mandarin)_HK_Flight_Attendant">HK_Flight_Attendant（港式空姐）</option>
+                            <option value="Chinese (Mandarin)_Sweet_Lady">Sweet_Lady（甜美女声）</option>
+                        </select>
+                    </label>
+                    <label>
+                        <span>语速 <em id="val-speed">0.85</em></span>
+                        <input type="range" id="voice-speed" min="0.5" max="1.5" step="0.05" value="0.85">
+                    </label>
+                    <label>
+                        <span>音调 <em id="val-pitch">+2</em></span>
+                        <input type="range" id="voice-pitch" min="-5" max="5" step="1" value="2">
+                    </label>
+                    <label>
+                        <span>音量 <em id="val-vol">100%</em></span>
+                        <input type="range" id="voice-vol" min="0" max="1" step="0.1" value="1.0">
+                    </label>
+                    <button type="button" id="btn-voice-preview">🔊 试听当前配置</button>
+                    <p class="voice-hint">⚠️ 改动音色/语速/音调后需重新生成音频才生效：<br><code>python3 generate_voices.py --force</code></p>
+                </div>
+            </details>
         </div>
 
         <!-- 关卡选择界面 -->
