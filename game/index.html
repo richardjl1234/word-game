@@ -8,8 +8,8 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Comic+Neue:wght@400;700&family=Quicksand:wght@400;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="css/style.css?v=33">
-    <link rel="stylesheet" href="css/animations.css?v=33">
+    <link rel="stylesheet" href="css/style.css?v=34">
+    <link rel="stylesheet" href="css/animations.css?v=34">
 </head>
 <body>
     <!-- 全局背景装饰（在所有界面显示） -->
@@ -420,19 +420,34 @@
                 </div>
             </div>
         </div>
+
+        <!-- ★ task #72：首次登录强制改密弹窗 -->
+        <div id="password-change-modal" class="modal">
+            <div class="modal-content">
+                <h3>🔑 首次登录 — 请修改密码</h3>
+                <p class="modal-hint">管理员为您创建了账号，请设置您自己的密码（至少 4 位）</p>
+                <input type="password" id="pwd-change-current" placeholder="当前默认密码" autocomplete="current-password">
+                <input type="password" id="pwd-change-new" placeholder="新密码（至少 4 位）" autocomplete="new-password">
+                <input type="password" id="pwd-change-confirm" placeholder="确认新密码" autocomplete="new-password">
+                <div class="modal-buttons">
+                    <button id="btn-confirm-password-change" class="btn-primary">确认修改</button>
+                </div>
+                <div id="pwd-change-error" class="auth-error" hidden></div>
+            </div>
+        </div>
     </div>
 
-    <script src="lib/lottie.min.js?v=33"></script>
-    <script src="js/config.js?v=33"></script>
-    <script src="js/soundManager.js?v=33"></script>
-    <script src="js/animationPlayer.js?v=33"></script>
-    <script src="js/backgroundAnimator.js?v=33"></script>
-    <script src="js/authManager.js?v=33"></script>
-    <script src="js/usersManager.js?v=33"></script>
-    <script src="js/librariesManager.js?v=33"></script>
-    <script src="js/wordManager.js?v=33"></script>
-    <script src="js/collision.js?v=33"></script>
-    <script src="js/game.js?v=33"></script>
-    <script src="js/gamepadController.js?v=33"></script>
+    <script src="lib/lottie.min.js?v=34"></script>
+    <script src="js/config.js?v=34"></script>
+    <script src="js/soundManager.js?v=34"></script>
+    <script src="js/animationPlayer.js?v=34"></script>
+    <script src="js/backgroundAnimator.js?v=34"></script>
+    <script src="js/authManager.js?v=34"></script>
+    <script src="js/usersManager.js?v=34"></script>
+    <script src="js/librariesManager.js?v=34"></script>
+    <script src="js/wordManager.js?v=34"></script>
+    <script src="js/collision.js?v=34"></script>
+    <script src="js/game.js?v=34"></script>
+    <script src="js/gamepadController.js?v=34"></script>
 </body>
 </html>

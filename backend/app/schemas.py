@@ -9,9 +9,9 @@ from pydantic import BaseModel, Field, ConfigDict
 # ==================== Auth（注册/登录） ====================
 
 class RegisterRequest(BaseModel):
-    """注册账号"""
+    """注册账号（需要 admin token）"""
     username: str = Field(..., description="昵称（账号凭证，账号内唯一）")
-    password: str = Field(..., description="密码（至少 6 位）")
+    password: str = Field(..., min_length=4, description="密码（至少 4 位）")
 
 
 class LoginRequest(BaseModel):
@@ -24,6 +24,8 @@ class AccountResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: str
     username: str
+    role: str = "user"
+    must_change_password: bool = False
     created_at: datetime
     last_login_at: Optional[datetime] = None
 
@@ -44,6 +46,13 @@ class AuthResponse(BaseModel):
     token_type: str = "bearer"
     account: AccountResponse
     profile: PlayerProfileResponse
+    must_change_password: bool = False
+
+
+class ChangePasswordRequest(BaseModel):
+    """修改密码"""
+    old_password: str = Field(...)
+    new_password: str = Field(..., min_length=4)
 
 
 class MeResponse(BaseModel):
@@ -51,6 +60,26 @@ class MeResponse(BaseModel):
     account: AccountResponse
     profiles: List[PlayerProfileResponse]
     current_profile: Optional[PlayerProfileResponse] = None
+
+
+# ==================== Admin User Management ====================
+
+class AdminCreateAccountRequest(BaseModel):
+    """Admin 创建新 Account"""
+    username: str = Field(..., min_length=2, max_length=20)
+    password: str = Field(default="1234", min_length=4)
+
+
+class AdminAccountResponse(BaseModel):
+    """Admin 看到的 Account（不含密码 hash）"""
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    username: str
+    role: str = "user"
+    must_change_password: bool = False
+    created_at: datetime
+    last_login_at: Optional[datetime] = None
+    profile_count: int = 0
 
 
 # ==================== Player Profile CRUD ====================

@@ -62,6 +62,13 @@ class Game {
             return;
         }
 
+        // ★ task #72：强制改密 — 弹改密框，不进入游戏
+        if (authManager.mustChangePassword()) {
+            this.cacheElements();
+            this._setupPasswordChangeModal();
+            return;
+        }
+
         // 已登录：先建好各管理器实例
         this.soundManager = window.soundManager || new SoundManager();
         this.animationPlayer = window.animationPlayer || new AnimationPlayer();
@@ -92,6 +99,14 @@ class Game {
 
         // 同步当前玩家显示
         this.updateCurrentPlayerDisplay();
+
+        // ★ task #72：非 admin 隐藏管理按钮
+        if (!authManager.isAdmin()) {
+            ['btn-vocab', 'btn-users', 'btn-import'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.style.display = 'none';
+            });
+        }
     }
 
     cacheElements() {
@@ -198,6 +213,56 @@ class Game {
             } catch (err) {
                 showError(err.message || '注册失败');
                 setLoading(false);
+            }
+        });
+    }
+
+    /** ★ task #72：强制改密模态框（admin 创建的用户首次登录必须改密） */
+    _setupPasswordChangeModal() {
+        const modal = document.getElementById('password-change-modal');
+        if (!modal) return;
+        modal.classList.add('active');
+
+        const currentInput = document.getElementById('pwd-change-current');
+        const newInput = document.getElementById('pwd-change-new');
+        const confirmInput = document.getElementById('pwd-change-confirm');
+        const errEl = document.getElementById('pwd-change-error');
+        const submitBtn = document.getElementById('btn-confirm-password-change');
+
+        const showError = (msg) => {
+            if (!errEl) return;
+            errEl.textContent = msg || '';
+            errEl.hidden = !msg;
+        };
+
+        submitBtn?.addEventListener('click', async () => {
+            showError('');
+            const current = currentInput?.value || '';
+            const newPw = newInput?.value || '';
+            const confirm = confirmInput?.value || '';
+            if (!current || !newPw || !confirm) {
+                showError('请填写所有字段');
+                return;
+            }
+            if (newPw.length < 4) {
+                showError('密码至少 4 位');
+                return;
+            }
+            if (newPw !== confirm) {
+                showError('两次密码不一致');
+                return;
+            }
+            submitBtn.disabled = true;
+            submitBtn.textContent = '⏳ 修改中...';
+            try {
+                await authManager.changePassword(current, newPw);
+                modal.classList.remove('active');
+                // 改密成功 → 重新 init（继续正常启动流程）
+                location.reload();
+            } catch (err) {
+                showError(err.message || '修改失败');
+                submitBtn.disabled = false;
+                submitBtn.textContent = '确认修改';
             }
         });
     }
@@ -412,6 +477,14 @@ class Game {
     }
 
     showScreen(screenId) {
+        // ★ task #72：权限守卫 — 非 admin 不可访问管理员界面
+        const ADMIN_SCREENS = ['vocab-screen', 'import-screen', 'users-screen'];
+        if (ADMIN_SCREENS.includes(screenId) && !authManager.isAdmin()) {
+            if (this.currentScreen !== 'start-screen') {
+                this.showScreen('start-screen');
+            }
+            return;
+        }
         // 隐藏所有界面
         Object.values(this.screens).forEach(screen => {
             if (screen) screen.classList.remove('active');
@@ -1573,7 +1646,12 @@ class Game {
         const el = document.getElementById('current-player-name');
         if (!el) return;
         const name = this.getCurrentPlayer();
-        el.textContent = name || '未设置';
+        let displayName = name || '未设置';
+        // ★ task #72：admin 显示管理员标签
+        if (authManager.isAdmin()) {
+            displayName += ' 👑管理员';
+        }
+        el.textContent = displayName;
 
         // ★ 同时刷新当前词库显示
         if (this.updateCurrentLibraryDisplay) {
@@ -2045,6 +2123,41 @@ class Game {
         this.showScreen('users-screen');
     }
 
+    /** ★ task #72：admin 创建新 Account（调用 POST /api/admin/accounts） */
+    async adminCreateAccountPrompt() {
+        const result = await this._promptForText({
+            title: '👑 新建账号（管理员）',
+            label: '用户名',
+            subLabel: '初始密码默认为 1234',
+            placeholder: '例如：student1',
+        });
+        if (!result) return;
+        try {
+            await authManager.apiFetch('/api/admin/accounts', {
+                method: 'POST',
+                body: JSON.stringify({ username: result }),
+            });
+            this.showMessage('✅ 账号创建成功');
+            this.renderUserList();
+        } catch (e) {
+            this.showMessage(`❌ 创建失败：${e.message}`);
+        }
+    }
+
+    /** ★ task #72：admin 删除 Account */
+    async adminDeleteAccount(accountId, username) {
+        if (!confirm(`确定要删除账号「${username}」及其所有数据吗？`)) return;
+        try {
+            await authManager.apiFetch(`/api/admin/accounts/${accountId}`, {
+                method: 'DELETE',
+            });
+            this.showMessage(`✅ 账号「${username}」已删除`);
+            this.renderUserList();
+        } catch (e) {
+            this.showMessage(`❌ 删除失败：${e.message}`);
+        }
+    }
+
     renderUserList() {
         const container = this.elements.userList;
         if (!container) return;
@@ -2113,6 +2226,62 @@ class Game {
             });
             container.appendChild(card);
         });
+
+        // ★ task #72：admin 账号管理区（Account 级别管理）
+        if (authManager.isAdmin()) {
+            // fire-and-forget（内部 await 不阻塞 renderUserList）
+            this._renderAdminAccountSection(container).catch(e => console.warn('Admin section error:', e));
+        }
+    }
+
+    /** ★ task #72：渲染 admin 账号管理区 */
+    async _renderAdminAccountSection(container) {
+        const adminSection = document.createElement('div');
+        adminSection.className = 'admin-accounts-section';
+        adminSection.innerHTML = `
+            <h3 style="margin-top:20px;border-top:2px solid #f0c040;padding-top:12px;">
+                👑 账号管理（管理员）
+                <button id="btn-admin-create-account" class="btn-small btn-primary" style="margin-left:8px;">+ 新建账号</button>
+            </h3>
+            <div id="admin-account-list" class="admin-account-list"></div>
+        `;
+        container.appendChild(adminSection);
+
+        document.getElementById('btn-admin-create-account')
+            ?.addEventListener('click', () => this.adminCreateAccountPrompt());
+
+        // 加载 Account 列表
+        try {
+            const accounts = await authManager.apiFetch('/api/admin/accounts', { method: 'GET' });
+            const listEl = document.getElementById('admin-account-list');
+            if (!listEl) return;
+            listEl.innerHTML = '';
+            accounts.forEach(acc => {
+                const item = document.createElement('div');
+                item.className = 'admin-account-item';
+                const pwLabel = acc.must_change_password ? '🔑 初始密码' : '✅ 已改密';
+                item.innerHTML = `
+                    <span class="admin-account-name">
+                        ${window.authManager.getAccountId() === acc.id ? '👑 ' : ''}
+                        ${this._escapeHtml(acc.username)}
+                        <span class="admin-account-role ${acc.role}">${acc.role}</span>
+                        <span class="admin-account-pw">${pwLabel}</span>
+                        <span class="admin-account-num">📊 ${acc.profile_count} 档案</span>
+                    </span>
+                    ${acc.role !== 'admin' ? `<button class="btn-small btn-danger admin-del-btn" data-id="${acc.id}" data-name="${this._escapeHtml(acc.username)}">删除</button>` : ''}
+                `;
+                const delBtn = item.querySelector('.admin-del-btn');
+                if (delBtn) {
+                    delBtn.addEventListener('click', () => {
+                        this.adminDeleteAccount(acc.id, delBtn.dataset.name);
+                    });
+                }
+                listEl.appendChild(item);
+            });
+        } catch (e) {
+            const listEl = document.getElementById('admin-account-list');
+            if (listEl) listEl.innerHTML = `<div class="admin-account-error">加载失败：${this._escapeHtml(e.message)}</div>`;
+        }
     }
 
     switchUser(userId) {

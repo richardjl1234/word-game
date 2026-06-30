@@ -2102,3 +2102,56 @@ button:active {
         font-size: 1.8rem;
     }
 }
+/* ===== ★ task #72: Admin 账号管理 ===== */
+.admin-account-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 12px;
+    margin: 4px 0;
+    background: #f9f7f0;
+    border-radius: 10px;
+    border: 1px solid #e8e0c8;
+    transition: background 0.15s;
+}
+.admin-account-item:hover {
+    background: #f0e8d0;
+}
+.admin-account-name {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 600;
+    flex-wrap: wrap;
+}
+.admin-account-role {
+    font-size: 0.75rem;
+    padding: 1px 6px;
+    border-radius: 8px;
+    background: #e0d8c0;
+    color: #666;
+}
+.admin-account-role.admin {
+    background: #f0c040;
+    color: #5a3e00;
+    font-weight: 700;
+}
+.admin-account-pw {
+    font-size: 0.75rem;
+    color: #888;
+}
+.admin-account-num {
+    font-size: 0.75rem;
+    color: #666;
+}
+.admin-account-error {
+    padding: 8px;
+    color: #c00;
+    font-size: 0.85rem;
+}
+.admin-del-btn {
+    flex-shrink: 0;
+}
+.admin-accounts-section h3 {
+    font-size: 1rem;
+}

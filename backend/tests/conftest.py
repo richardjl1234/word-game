@@ -143,16 +143,40 @@ def test_account_data():
 
 
 @pytest.fixture(scope="function")
-def auth_account(client, test_account_data):
-    """注册一个测试账号 + 默认 profile，返回 (Account, dict{headers})"""
-    r = client.post("/api/auth/register", json=test_account_data)
-    assert r.status_code == 201, f"注册失败: {r.text}"
-    data = r.json()
-    token = data["token"]
+def auth_account(db_session, test_account_data):
+    """通过 ORM 创建测试账号（register 已改为 admin-only）"""
+    from app import auth as auth_core
+    from app.models import Account, PlayerProfile
+
+    account = Account(
+        id=auth_core.gen_account_id(),
+        username=test_account_data["username"],
+        password_hash=auth_core.hash_password(test_account_data["password"]),
+        role="user",
+        must_change_password=False,
+    )
+    db_session.add(account)
+    db_session.flush()
+    profile = PlayerProfile(
+        id=auth_core.gen_player_id(),
+        account_id=account.id,
+        nickname=test_account_data["username"],
+        avatar="🦊",
+    )
+    db_session.add(profile)
+    db_session.commit()
+    db_session.refresh(account)
+    db_session.refresh(profile)
+
+    token = auth_core.create_access_token(account.id, account.username, account.role)
     headers = {"Authorization": f"Bearer {token}"}
     return {
-        "account": data["account"],
-        "profile": data["profile"],
+        "account": {"id": account.id, "username": account.username,
+                     "role": account.role, "must_change_password": account.must_change_password,
+                     "created_at": account.created_at.isoformat() if account.created_at else None,
+                     "last_login_at": None},
+        "profile": {"id": profile.id, "account_id": profile.account_id,
+                     "nickname": profile.nickname, "avatar": profile.avatar},
         "token": token,
         "headers": headers,
     }
@@ -165,22 +189,87 @@ def auth_headers(auth_account):
 
 
 @pytest.fixture(scope="function")
-def second_account(client):
+def second_account(db_session):
     """第二个独立账号（用于 ownership 测试）"""
     import secrets
-    data = {
-        "username": f"v{secrets.token_hex(4)}",
-        "password": "testpass456",
-    }
-    r = client.post("/api/auth/register", json=data)
-    assert r.status_code == 201
-    d = r.json()
+    from app import auth as auth_core
+    from app.models import Account, PlayerProfile
+
+    account = Account(
+        id=auth_core.gen_account_id(),
+        username=f"v{secrets.token_hex(4)}",
+        password_hash=auth_core.hash_password("testpass456"),
+        role="user",
+        must_change_password=False,
+    )
+    db_session.add(account)
+    db_session.flush()
+    profile = PlayerProfile(
+        id=auth_core.gen_player_id(),
+        account_id=account.id,
+        nickname=account.username,
+        avatar="🦊",
+    )
+    db_session.add(profile)
+    db_session.commit()
+    db_session.refresh(account)
+    db_session.refresh(profile)
+
+    token = auth_core.create_access_token(account.id, account.username, account.role)
+    headers = {"Authorization": f"Bearer {token}"}
     return {
-        "account": d["account"],
-        "profile": d["profile"],
-        "token": d["token"],
-        "headers": {"Authorization": f"Bearer {d['token']}"},
+        "account": {"id": account.id, "username": account.username,
+                     "role": account.role},
+        "profile": {"id": profile.id, "account_id": profile.account_id,
+                     "nickname": profile.nickname, "avatar": profile.avatar},
+        "token": token,
+        "headers": headers,
     }
+
+
+@pytest.fixture(scope="function")
+def admin_account(db_session):
+    """直接 ORM 创建 admin 账号，返回 {account, token, headers}"""
+    import secrets
+    from app import auth as auth_core
+    from app.models import Account, PlayerProfile
+
+    account = Account(
+        id=auth_core.gen_account_id(),
+        username=f"admin_{secrets.token_hex(4)}",
+        password_hash=auth_core.hash_password("admin123"),
+        role="admin",
+        must_change_password=True,
+    )
+    db_session.add(account)
+    db_session.flush()
+    profile = PlayerProfile(
+        id=auth_core.gen_player_id(),
+        account_id=account.id,
+        nickname=account.username,
+        avatar="🦊",
+    )
+    db_session.add(profile)
+    db_session.commit()
+    db_session.refresh(account)
+    db_session.refresh(profile)
+
+    token = auth_core.create_access_token(account.id, account.username, account.role)
+    headers = {"Authorization": f"Bearer {token}"}
+    return {
+        "account": {"id": account.id, "username": account.username,
+                     "role": account.role, "must_change_password": account.must_change_password},
+        "profile": {"id": profile.id, "account_id": profile.account_id,
+                     "nickname": profile.nickname, "avatar": profile.avatar},
+        "token": token,
+        "headers": headers,
+    }
+
+
+@pytest.fixture(scope="function")
+def admin_headers(admin_account):
+    """仅返回 admin Authorization header"""
+    return admin_account["headers"]
 
 
 # ==================== OCR fixtures（task #59） ====================

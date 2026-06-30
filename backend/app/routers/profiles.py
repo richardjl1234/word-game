@@ -40,11 +40,11 @@ def list_profiles(
     account: Account = Depends(auth_core.get_current_account),
     db: Session = Depends(get_db),
 ):
-    if account_id != account.id:
+    if account_id != account.id and account.role != "admin":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="无权查看其他账号的档案")
     profiles = (
         db.query(PlayerProfile)
-        .filter(PlayerProfile.account_id == account.id)
+        .filter(PlayerProfile.account_id == account_id)
         .order_by(PlayerProfile.created_at.asc())
         .all()
     )

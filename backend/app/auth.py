@@ -64,12 +64,13 @@ def validate_username(username: str) -> str:
 
 # ---------- JWT ----------
 
-def create_access_token(account_id: str, username: str) -> str:
-    """签发 JWT（HS256，payload: sub=account_id, name=username, exp=now+expire_days）"""
+def create_access_token(account_id: str, username: str, role: str = "user") -> str:
+    """签发 JWT（HS256，payload: sub=account_id, name=username, role=role, exp=now+expire_days）"""
     expire = datetime.now(timezone.utc) + timedelta(days=settings.JWT_EXPIRE_DAYS)
     payload = {
         "sub": account_id,
         "name": username,
+        "role": role,
         "exp": expire,
         "iat": datetime.now(timezone.utc),
     }
@@ -155,6 +156,25 @@ def get_current_account_optional(
     if not account_id:
         return None
     return db.query(Account).filter(Account.id == account_id).first()
+
+
+def get_current_admin(
+    account: Account = Depends(get_current_account),
+) -> Account:
+    """FastAPI Depends：仅允许 admin 角色的用户通过"""
+    if account.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="需要管理员权限",
+        )
+    return account
+
+
+def validate_password_strength(password: str) -> str:
+    """密码强度校验：至少 MIN_PASSWORD_LENGTH 位"""
+    if len(password) < settings.MIN_PASSWORD_LENGTH:
+        raise ValueError(f"密码长度至少 {settings.MIN_PASSWORD_LENGTH} 位")
+    return password
 
 
 # ---------- ID 生成 ----------

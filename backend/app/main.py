@@ -14,7 +14,7 @@ from .config import settings, get_settings
 from .database import init_db
 from .storage import init_storage, S3Storage, LocalStorage
 from . import __version__
-from .routers import upload, jobs, libraries, auth, profiles
+from .routers import upload, jobs, libraries, auth, profiles, admin
 
 logging.basicConfig(
     level=logging.INFO if not settings.APP_DEBUG else logging.DEBUG,
@@ -103,6 +103,7 @@ app.include_router(jobs.router, prefix="/api", tags=["jobs"])
 app.include_router(libraries.router, prefix="/api", tags=["libraries"])
 app.include_router(auth.router, tags=["auth"])
 app.include_router(profiles.router, tags=["profiles"])
+app.include_router(admin.router, tags=["admin"])
 
 
 if __name__ == "__main__":
