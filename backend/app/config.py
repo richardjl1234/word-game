@@ -35,7 +35,7 @@ class Settings(BaseSettings):
     APP_HOST: str = "0.0.0.0"
     APP_PORT: int = 8000
     APP_DEBUG: bool = True
-    CORS_ORIGINS: str = "http://localhost:8080,http://127.0.0.1:8080"
+    CORS_ORIGINS: str = "*"
 
     # Storage backend: "s3" (default) or "local"（dev 无 S3 时可切 local）
     STORAGE_BACKEND: str = "local"  # 默认 local，方便本地开发调试；生产改 s3

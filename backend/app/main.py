@@ -64,11 +64,12 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS（开发时放行前端端口）
+# CORS（开发时放行前端端口；LAN 部署可设 CORS_ORIGINS=* 允许任意 origin）
+# ★ allow_credentials=False：因为只用 Bearer token（不用 cookie），可以放心 allow_origins=*
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins_list,
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )

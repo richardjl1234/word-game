@@ -413,3 +413,33 @@ OCR worker 已用 EasyOCR（本地开源，pip 一行安装，CPU）。首次调
 - 候选 1：Claude/GPT-4o vision（结构化 + 中英混排强 + 按图片付费）
 - 候选 2：PaddleOCR（本地开源 + 中文更强 + 依赖重）
 - 候选 3：百度 OCR（云 API + 中文最强 + 按次付费）
+
+
+---
+
+## TD-011: 局域网 / 跨机访问 CORS + 0.0.0.0 绑定（task #67）
+
+### 现状
+之前后端绑 `127.0.0.1` 且 CORS 只允许 `localhost:8080`，导致：
+- 局域网 / 跨机访问时报 "Cross-Origin Request Blocked: ... Status code: (null)"（实为网络不可达，不是 CORS 配置错）
+- 前端硬编码 `127.0.0.1:8765` 在其他机器上指向的不是后端机器
+
+### 修复
+1. **`start.sh`**：`--host 0.0.0.0`（前后已绑全部接口）
+2. **`backend/app/config.py`**：`CORS_ORIGINS` 默认改 `*`（配合 Bearer 无 cookie 凭证）
+3. **`backend/app/main.py`**：`allow_credentials=False`（无 cookie，可放心 `*`）
+4. **`game/js/config.{example,}.js`**：`backendUrl` 用 `window.location.hostname` 自动算出后端主机（同机部署 / LAN 部署通用）
+
+### 已知限制
+**优先级：低**
+
+- **生产部署需收紧 CORS**：`*` 仅适合 LAN dev。生产建议显式 `CORS_ORIGINS="https://your-domain.com"`，env 变量即可。
+- **HTTPS**：当前后端 HTTP，跨机传输无加密。生产应上 nginx 反代 + TLS。
+- **火墙**：LAN 部署后端会暴露在内网，应确认网络环境可信。
+
+### 验证
+```bash
+LAN_IP=$(hostname -I | awk '{print $1}')
+curl -s http://$LAN_IP:8765/api/health  # 应返 status=ok
+# Playwright 跑 /tmp/test_lan_e2e_v2.js  # 6/6 通过
+```

@@ -136,7 +136,8 @@ backend_start_bg() {
     export APP_DEBUG="${APP_DEBUG:-true}"
 
     cd "$BACKEND_DIR"
-    nohup "$VENV_PY" -m uvicorn app.main:app --host 127.0.0.1 --port "$BACKEND_PORT" \
+    # ★ 绑 0.0.0.0 而不是 127.0.0.1（让局域网其他机器可访问 — 见 TD-011）
+    nohup "$VENV_PY" -m uvicorn app.main:app --host 0.0.0.0 --port "$BACKEND_PORT" \
         --app-dir "$BACKEND_DIR" --log-level info \
         > "$BACKEND_LOG_FILE" 2>&1 &
     echo $! > "$BACKEND_PID_FILE"
@@ -267,7 +268,7 @@ case "$target" in
                 echo "   端口: $BACKEND_PORT"
                 print_usage
                 cd "$BACKEND_DIR"
-                exec "$VENV_PY" -m uvicorn app.main:app --host 127.0.0.1 --port "$BACKEND_PORT" \
+                exec "$VENV_PY" -m uvicorn app.main:app --host 0.0.0.0 --port "$BACKEND_PORT" \
                     --app-dir "$BACKEND_DIR" --reload
                 ;;
             *)
