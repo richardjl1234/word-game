@@ -443,3 +443,46 @@ LAN_IP=$(hostname -I | awk '{print $1}')
 curl -s http://$LAN_IP:8765/api/health  # 应返 status=ok
 # Playwright 跑 /tmp/test_lan_e2e_v2.js  # 6/6 通过
 ```
+
+
+---
+
+## TD-012: 手柄在 vocab/users/import 失效 + 无通用返回（task #69）
+
+### 现状
+用户报：从主页可手柄进 词库管理 / 用户管理 / 导入词库 等子界面，但进去后手柄**完全无效**，且无任何返回键回到主页。
+
+### 根因（2 处）
+1. **`updateFocusableButtons` 没为这些子界面定义 selector**：
+   原代码 `switch` 里只覆盖 start / ranking / level-select / about / pause / win / gameover。
+   vocab / users / import 三个子界面**根本没被收集进 `focusableButtons`**，
+   → D-pad 在这些界面无元素可聚焦、A 键也就没有可触发对象。
+2. **B 键 / Select 键的 back handler 写死 specific screens**：
+   ```js
+   if (this.currentScreen === 'level-select-screen' || this.currentScreen === 'about-screen')
+       this.showScreen('start-screen');
+   ```
+   vocab / users / import / ranking 等都被遗漏，按 B 无反应。
+
+### 修复
+1. **`updateFocusableButtons`** 加 3 个 case（vocab / users / import），selector 包含
+   `.btn-back` + `.btn-primary` + `.library-card` / `.user-card`。
+2. **新增 `_gamepadBackToStart()` helper**：查 `#${currentScreen} .btn-back` 可见就 click，
+   否则兜底 `showScreen('start-screen')`。**未来新子界面只要带 `.btn-back` 即可手柄返回**，
+   不必再改 game.js。
+3. **B 键 / Select 键 handler**：把 specific-screen 替换成 `_gamepadBackToStart()`。
+4. **filter 增加 `!b.disabled`**：避免把 disabled 的 btn-import-submit 列入可聚焦。
+
+### 验证
+- ✅ test_gamepad_navigation.js 新增 27/27 通过：
+  - 6 个子界面（vocab/users/import/ranking/level-select/about）手柄 A 键进入 + B 键返回
+  - Select 键（button 8）也支持返回
+  - 每个子界面 focusableButtons 都含 .btn-back
+- ✅ 其他 E2E 无回归（backend 16 / auth 11 / libraries 21 / image_upload 15 等）
+
+### 已知未覆盖（next steps）
+**优先级：低**
+
+- `.library-card` / `.user-card` 卡片内操作（编辑/删除）的手柄聚焦：当前只加进 selector，
+  卡片内子按钮是否响应手柄还没单独测；如有需求再细化
+- 拖拽上传（import drop zone）：手柄不可拖，OK 跳过
