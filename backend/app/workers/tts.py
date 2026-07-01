@@ -195,7 +195,7 @@ def _save_placeholder(text: str, lang: str, storage) -> str:
         import hashlib
         key_name = hashlib.md5(text.encode("utf-8")).hexdigest()[:8]
 
-    storage_key = f"audio/{lang}/{key_name}.mp3"
+    storage_key = f"sounds/{lang}/{key_name}.mp3"
     try:
         storage.upload(storage_key, PLACEHOLDER_MP3, content_type="audio/mpeg")
         logger.debug(f"占位 mp3 写入: {storage_key} ({lang}, {text[:20]})")
@@ -238,7 +238,7 @@ def generate_one(text: str, lang: str, *, storage=None) -> Tuple[bool, str]:
             else:
                 import hashlib
                 key_name = hashlib.md5(text.encode("utf-8")).hexdigest()[:8]
-            storage_key = f"audio/{lang}/{key_name}.mp3"
+            storage_key = f"sounds/{lang}/{key_name}.mp3"
             try:
                 storage.upload(storage_key, data, content_type="audio/mpeg")
                 return True, storage_key

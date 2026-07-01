@@ -129,9 +129,16 @@ def run_full_pipeline(job_id: str, source_type: str):
         meanings = lookup_batch(words)
         known = {w: m for w, m in meanings.items() if m}
         unknown = [w for w, m in meanings.items() if not m]
+        # 保存前 50 个已知词详情（供前端 OCR 详情弹窗展示）
+        known_list = [{"word": w, "meaning": m} for w, m in list(known.items())[:50]]
         update_job_status(
             job_id,
-            result={"known_count": len(known), "unknown_count": len(unknown), "unknown_words": unknown[:30]},
+            result={
+                "known_count": len(known),
+                "unknown_count": len(unknown),
+                "known_words": known_list,
+                "unknown_words": unknown[:60],
+            },
         )
         logger.info(f"[{job_id}] meaning_lookup: {len(known)} known, {len(unknown)} unknown")
 
@@ -228,8 +235,27 @@ def _step_add_to_library(job_id: str, words_meanings: dict) -> int:
     with _get_session() as db:
         lib = db.query(Library).filter(Library.id == target_lib_id).first()
         if not lib:
-            logger.warning(f"[{job_id}] 目标词库不存在: {target_lib_id}")
-            return 0
+            # ★ 后端没有这个词库 → 自动创建（兼容前端 localStorage-only 创建的库）
+            logger.warning(f"[{job_id}] 目标词库不存在: {target_lib_id}，自动创建")
+            lib_name = f"导入_{job.source_filename.rsplit('.', 1)[0][:20]}" if job.source_filename else "自动导入"
+            lib = Library(
+                id=target_lib_id,
+                name=lib_name,
+                source=f"import:{job.source_type}",
+                is_default=False,
+                word_count=0,
+                level_count=1,
+            )
+            db.add(lib)
+            db.commit()
+            # 重新查一次拿到完整对象
+            lib = db.query(Library).filter(Library.id == target_lib_id).first()
+            if not lib:
+                logger.error(f"[{job_id}] 自动创建词库失败")
+                return 0
+            logger.info(f"[{job_id}] 已自动创建词库: {lib_name} (id={target_lib_id})")
+            # 更新 job 的回填信息
+            update_job_status(job_id, result={"auto_created_library": True, "library_name": lib_name})
         if lib.is_default:
             logger.warning(f"[{job_id}] 默认词库只读，跳过入库")
             return 0

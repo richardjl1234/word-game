@@ -1994,18 +1994,25 @@ class Game {
     /**
      * 切换到指定词库
      */
-    switchLibrary(libraryId) {
+    async switchLibrary(libraryId) {
         if (typeof librariesManager === 'undefined') return;
         if (librariesManager.getCurrentLibraryId() === libraryId) return;
         if (!librariesManager.setCurrentLibrary(libraryId)) {
             this.showMessage('切换失败');
             return;
         }
+        // ★ 确保词库单词已从后端加载 + 刷新（强制刷新获取最新音频路径）
+        const lib = librariesManager.getLibrary(libraryId);
+        if (lib && !lib.isDefault) {
+            const result = await librariesManager.refreshLibrary(libraryId).catch(() => ({ refreshed: 0 }));
+            if (result.refreshed > 0) {
+                console.log(`[switchLibrary] 刷新 ${result.refreshed} 词`);
+            }
+        }
         // 通知 wordManager 重置会话状态
         if (this.wordManager && this.wordManager.onLibraryChanged) {
             this.wordManager.onLibraryChanged();
         }
-        const lib = librariesManager.getLibrary(libraryId);
         this.showMessage(`已切换到「${lib.name}」`);
         this.renderLibraryList();
         this.updateCurrentLibraryDisplay();
@@ -2353,26 +2360,46 @@ class Game {
         if (statusEl) {
             statusEl.innerHTML = `
                 <div class="import-hint">
-                    📌 上传 TXT / PDF / DOCX 文件，系统自动提取英语单词 + 查中文释义 + 加入「${librariesManager.getCurrentLibrary()?.name || ''}」+ 生成音频。
+                    📌 上传 TXT / PDF / DOCX / 图片 文件，系统自动提取英语单词 + 查中文释义 + 加入「${librariesManager.getCurrentLibrary()?.name || ''}」+ 生成音频。
                     <br><br>
                     <strong>当前支持：</strong>
                     <ul>
                         <li>✅ TXT（推荐，纯英文文本）</li>
                         <li>✅ PDF / DOCX（自动转文本）</li>
-                        <li>⏳ MP3 / 图片（等 ASR/OCR 选型）</li>
+                        <li>✅ 🖼️ 图片（OCR 识别）</li>
+                        <li>⏳ MP3 / WAV / M4A（等 ASR 选型）</li>
                     </ul>
-                    处理在后台进行，可关闭页面稍后查看进度。
+                    支持多文件/文件夹上传；处理在后台进行，可关闭页面稍后查看进度。
                 </div>
             `;
         }
+
+        // 重置文件选择状态
+        this._selectedFiles = [];
+        const info = document.getElementById('import-file-info');
+        if (info) info.innerHTML = '';
+
         // 绑定文件选择事件
         const fileInput = document.getElementById('import-file-input');
         if (fileInput && !fileInput.dataset.bound) {
             fileInput.addEventListener('change', (e) => this.handleFileSelected(e));
             fileInput.dataset.bound = '1';
         }
+        const folderInput = document.getElementById('import-folder-input');
+        if (folderInput && !folderInput.dataset.bound) {
+            folderInput.addEventListener('change', (e) => this.handleFileSelected(e));
+            folderInput.dataset.bound = '1';
+        }
+
         const dropZone = document.getElementById('import-drop-zone');
         if (dropZone && !dropZone.dataset.bound) {
+            // 点击 drop zone → 打开文件选择器
+            dropZone.addEventListener('click', (e) => {
+                // 如果点击的是按钮，让按钮自己处理（不触发文件选择器）
+                if (e.target.closest('.btn-small')) return;
+                fileInput.value = ''; // reset to ensure change event fires for same selection
+                fileInput.click();
+            });
             dropZone.addEventListener('dragover', (e) => {
                 e.preventDefault();
                 dropZone.classList.add('dragover');
@@ -2383,47 +2410,104 @@ class Game {
                 dropZone.classList.remove('dragover');
                 const files = e.dataTransfer.files;
                 if (files.length > 0) {
-                    fileInput.files = files;
-                    this.handleFileSelected({ target: fileInput });
+                    this._handleFiles(files);
                 }
             });
             dropZone.dataset.bound = '1';
         }
+
+        // 选择文件 / 选择文件夹 按钮
+        const pickBtn = document.getElementById('btn-pick-files');
+        if (pickBtn && !pickBtn.dataset.bound) {
+            pickBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                fileInput.value = ''; // reset to ensure change event fires
+                fileInput.click();
+            });
+            pickBtn.dataset.bound = '1';
+        }
+        const pickFolderBtn = document.getElementById('btn-pick-folder');
+        if (pickFolderBtn && !pickFolderBtn.dataset.bound) {
+            pickFolderBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                folderInput.value = '';
+                folderInput.click();
+            });
+            pickFolderBtn.dataset.bound = '1';
+        }
+
         const submitBtn = document.getElementById('btn-import-submit');
         if (submitBtn) {
-            submitBtn.disabled = false;
+            submitBtn.disabled = !this._selectedFiles || this._selectedFiles.length === 0;
             submitBtn.onclick = () => this.uploadFile();
         }
 
         this.showScreen('import-screen');
     }
 
-    handleFileSelected(e) {
-        const file = e.target.files[0];
-        if (!file) return;
+    /**
+     * 处理用户选择的文件列表（来自文件 input 或拖拽）
+     */
+    _handleFiles(files) {
+        this._selectedFiles = Array.from(files);
         const info = document.getElementById('import-file-info');
         if (!info) return;
-        const sizeMB = (file.size / 1024 / 1024).toFixed(2);
-        const isImage = file.type && file.type.startsWith('image/');
-        const icon = isImage ? '🖼️' : '📄';
-        const hint = isImage ? '（将进行 OCR 识别）' : '';
-        info.innerHTML = `
-            <div>${icon} <strong>${this._escapeHtml(file.name)}</strong> ${hint}</div>
-            <div>类型：${this._escapeHtml(file.type || '未知')}</div>
-            <div>大小：${sizeMB} MB</div>
-        `;
-        // 自动启用提交按钮
+
+        if (this._selectedFiles.length === 0) {
+            info.innerHTML = '';
+            const submitBtn = document.getElementById('btn-import-submit');
+            if (submitBtn) submitBtn.disabled = true;
+            return;
+        }
+
+        // 按类型分组显示
+        const imageFiles = this._selectedFiles.filter(f => f.type && f.type.startsWith('image/'));
+        const docFiles = this._selectedFiles.filter(f => !f.type || !f.type.startsWith('image/'));
+
+        let html = `<div><strong>已选择 ${this._selectedFiles.length} 个文件：</strong></div>`;
+        if (imageFiles.length > 0) {
+            html += `<div>🖼️ 图片：${imageFiles.length} 个（OCR 识别）</div>`;
+            // 显示部分文件名
+            const names = imageFiles.slice(0, 5).map(f => this._escapeHtml(f.name)).join('、');
+            if (imageFiles.length > 5) {
+                html += `<div style="font-size:0.8rem;color:#888;margin-top:4px;">${names} 等 ${imageFiles.length} 个</div>`;
+            } else {
+                html += `<div style="font-size:0.8rem;color:#888;margin-top:4px;">${names}</div>`;
+            }
+        }
+        if (docFiles.length > 0) {
+            const types = [...new Set(docFiles.map(f => f.name.split('.').pop() || f.type))].join('/');
+            html += `<div>📄 文档：${docFiles.length} 个（${types}）</div>`;
+            const names = docFiles.slice(0, 3).map(f => this._escapeHtml(f.name)).join('、');
+            html += `<div style="font-size:0.8rem;color:#888;margin-top:4px;">${names}${docFiles.length > 3 ? ' 等' : ''}</div>`;
+        }
+        info.innerHTML = html;
+
         const submitBtn = document.getElementById('btn-import-submit');
-        if (submitBtn) submitBtn.disabled = false;
+        if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.textContent = `🚀 开始导入（${this._selectedFiles.length} 个文件）`;
+        }
+    }
+
+    handleFileSelected(e) {
+        const files = e.target.files;
+        if (!files || files.length === 0) return;
+        this._handleFiles(files);
+        // 注意：folder input 和 file input 共用一个 handler
+        // 如果 folder input 触发，清理 file input 的选择以免混淆
+        if (e.target.id === 'import-folder-input') {
+            // 保留 folder 的选择，但不要和 file input 混合
+        }
     }
 
     /**
      * ★ 上传文件到后端 → 触发 5 步 pipeline → 轮询 job 状态
+     * 支持多文件：逐个上传，每个文件独立 poll 直到完成，再处理下一个
      */
     async uploadFile() {
-        const fileInput = document.getElementById('import-file-input');
-        const file = fileInput?.files[0];
-        if (!file) {
+        const files = this._selectedFiles;
+        if (!files || files.length === 0) {
             this._showImportError('请先选择文件');
             return;
         }
@@ -2443,45 +2527,130 @@ class Game {
         const submitBtn = document.getElementById('btn-import-submit');
         if (submitBtn) {
             submitBtn.disabled = true;
-            submitBtn.textContent = '⏳ 上传中...';
+            submitBtn.textContent = `⏳ 导入中...（0/${files.length}）`;
         }
 
         const backendUrl = (typeof window !== 'undefined' && window.MINIMAX_CONFIG?.backendUrl)
             || 'http://127.0.0.1:8765';
 
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('user_id', user.id);
-        formData.append('target_library_id', lib.id);
-
-        let jobId;
+        // ★ 确保目标词库存在于后端（前端 localStorage 创建的词库后端不知道）
+        let targetLibId = lib.id;
         try {
-            const resp = await fetch(`${backendUrl}/api/upload`, {
-                method: 'POST',
-                body: formData,
+            const checkResp = await fetch(`${backendUrl}/api/libraries/${lib.id}`, {
                 headers: authManager.getAuthHeaders(),
             });
-            if (!resp.ok) {
-                const err = await resp.json().catch(() => ({ detail: resp.statusText }));
-                throw new Error(err.detail || `HTTP ${resp.status}`);
+            if (!checkResp.ok) {
+                // 后端没有这个词库 → 创建它
+                this._showImportStatus(`⏳ 正在同步词库「${this._escapeHtml(lib.name)}」到后端...`, 'info');
+                const createResp = await fetch(`${backendUrl}/api/libraries`, {
+                    method: 'POST',
+                    headers: { ...authManager.getAuthHeaders(), 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: lib.name, source: 'import' }),
+                });
+                if (!createResp.ok) {
+                    const errData = await createResp.json().catch(() => ({}));
+                    // 如果后端已存在同名词库（之前同步过），查找它的 ID
+                    if (createResp.status === 409) {
+                        const listResp = await fetch(`${backendUrl}/api/libraries`, {
+                            headers: authManager.getAuthHeaders(),
+                        });
+                        if (listResp.ok) {
+                            const allLibs = await listResp.json();
+                            const existing = allLibs.find(l => l.name === lib.name);
+                            if (existing) targetLibId = existing.id;
+                        }
+                    } else {
+                        throw new Error(errData.detail || `HTTP ${createResp.status}`);
+                    }
+                } else {
+                    const newLib = await createResp.json();
+                    targetLibId = newLib.id;
+                }
+                // 更新 LibrariesManager 中的库 ID 为后端 ID
+                const localLib = librariesManager.getLibrary(lib.id);
+                if (localLib && targetLibId !== lib.id) {
+                    // 把旧 ID 替换为新 ID（localStorage 同步）
+                    localLib.id = targetLibId;
+                    librariesManager._saveUserLibraries();
+                    // 转移单词数据到新 ID
+                    const words = librariesManager.getWords(lib.id);
+                    if (words.length > 0) {
+                        librariesManager._saveWordsToStorage(targetLibId, words);
+                    }
+                    delete librariesManager.words[lib.id];
+                    librariesManager.currentLibraryId = targetLibId;
+                    try { localStorage.setItem('wordGameCurrentLibraryId', targetLibId); } catch (e) {}
+                }
+                this._showImportStatus(`✅ 词库「${this._escapeHtml(lib.name)}」已同步到后端`, 'info');
             }
-            const job = await resp.json();
-            jobId = job.id;
-            this._showImportStatus(`✅ 上传成功！Job ID: ${jobId.slice(0, 8)}... 正在后台处理...`, 'info');
         } catch (e) {
-            this._showImportError(`上传失败：${e.message}（后端是否在 ${backendUrl} 启动？）`);
-            if (submitBtn) {
-                submitBtn.disabled = false;
-                submitBtn.textContent = '🚀 开始导入';
-            }
-            return;
+            // 同步失败时继续尝试（用原始 lib.id），后端 pipeline 会跳过不存在的库
+            console.warn('[upload] 词库同步失败，将使用原始 ID 重试:', e.message);
         }
 
-        // 轮询 job 状态
-        this._pollJobStatus(jobId, lib.id);
+        let completed = 0;
+        let failed = 0;
+
+        for (let i = 0; i < files.length; i++) {
+            const file = files[i];
+            this._showImportStatus(`⏳ 正在处理第 ${i + 1}/${files.length} 个文件：<strong>${this._escapeHtml(file.name)}</strong>`, 'info');
+
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('user_id', user.id);
+            formData.append('target_library_id', lib.id);
+
+            try {
+                const resp = await fetch(`${backendUrl}/api/upload`, {
+                    method: 'POST',
+                    body: formData,
+                    headers: authManager.getAuthHeaders(),
+                });
+                if (!resp.ok) {
+                    const err = await resp.json().catch(() => ({ detail: resp.statusText }));
+                    throw new Error(err.detail || `HTTP ${resp.status}`);
+                }
+                const job = await resp.json();
+                const jobId = job.id;
+
+                if (submitBtn) {
+                    submitBtn.textContent = `⏳ 导入中...（${i}/${files.length}）· Job: ${jobId.slice(0, 8)}...`;
+                }
+
+                // 等待当前 job 完成（同步等待 _pollJobStatus）
+                await this._pollJobStatusSync(jobId, lib.id, i + 1, files.length);
+                completed++;
+            } catch (e) {
+                failed++;
+                this._showImportError(`文件「${this._escapeHtml(file.name)}」处理失败：${e.message}`);
+                // 继续处理下一个文件
+            }
+
+            if (submitBtn) {
+                submitBtn.textContent = `⏳ 导入中...（${i + 1}/${files.length}）`;
+            }
+        }
+
+        // 全部完成
+        const summary = `✅ 全部处理完成！成功 ${completed} 个${failed > 0 ? `，失败 ${failed} 个` : ''}`;
+        this._showImportStatus(summary, completed > 0 ? 'info' : 'error');
+        if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.textContent = completed > 0 && failed === 0
+                ? '🚀 导入更多'
+                : '🚀 重新导入失败文件';
+        }
+
+        // 全部完成后刷新词库
+        if (completed > 0 && typeof librariesManager !== 'undefined') {
+            await librariesManager.refreshLibrary(lib.id);
+        }
     }
 
-    async _pollJobStatus(jobId, libraryId) {
+    /**
+     * 同步版 _pollJobStatus：返回 Promise，job 完成后 resolve / 失败时 reject
+     */
+    _pollJobStatusSync(jobId, libraryId, fileIndex, totalFiles) {
         const backendUrl = (typeof window !== 'undefined' && window.MINIMAX_CONFIG?.backendUrl)
             || 'http://127.0.0.1:8765';
         const STAGE_NAMES = {
@@ -2491,96 +2660,155 @@ class Game {
             'tts': '🔊 生成音频',
             'done': '✅ 完成',
         };
-        // ★ TD-013：TTS 阶段每词 2 次 API 调用 × ~0.7s/RPM 限流回退
-        // 1000 词约 12 分钟；500 词 + 偶尔 backoff 60s 约 8 分钟。
-        // 原 60*2s=2min 太短，必然超时。把上限提到 30 分钟，并自适应间隔。
-        const maxAttempts = 900;          // 30 分钟上限
-        const fastInterval = 2000;        // 前 60s 每 2s
-        const slowInterval = 5000;        // 之后每 5s 减负
-        const slowAfter = 30;             // 第 30 次（≈60s）后切换
+        const maxAttempts = 900;
+        const fastInterval = 2000;
+        const slowInterval = 5000;
+        const slowAfter = 30;
         let attempts = 0;
         const startedAt = Date.now();
 
-        const poll = async () => {
-            attempts++;
-            try {
-                const resp = await fetch(`${backendUrl}/api/jobs/${jobId}`, {
-                    headers: authManager.getAuthHeaders(),
-                });
-                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-                const job = await resp.json();
-                const stage = STAGE_NAMES[job.current_stage] || job.current_stage || '准备中...';
-                const progress = job.progress || 0;
-                const elapsedSec = Math.floor((Date.now() - startedAt) / 1000);
-                const elapsedStr = elapsedSec >= 60
-                    ? `${Math.floor(elapsedSec / 60)}分${elapsedSec % 60}秒`
-                    : `${elapsedSec}秒`;
-                const statusText = job.status === 'completed' ? '✅ 完成'
-                                : job.status === 'failed' ? '❌ 失败'
-                                : `⏳ ${stage}（${progress}%）· 已等待 ${elapsedStr}`;
+        return new Promise((resolve, reject) => {
+            const poll = async () => {
+                attempts++;
+                try {
+                    const resp = await fetch(`${backendUrl}/api/jobs/${jobId}`, {
+                        headers: authManager.getAuthHeaders(),
+                    });
+                    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+                    const job = await resp.json();
+                    const stage = STAGE_NAMES[job.current_stage] || job.current_stage || '准备中...';
+                    const progress = job.progress || 0;
+                    const elapsedSec = Math.floor((Date.now() - startedAt) / 1000);
+                    const elapsedStr = elapsedSec >= 60
+                        ? `${Math.floor(elapsedSec / 60)}分${elapsedSec % 60}秒`
+                        : `${elapsedSec}秒`;
+                    const statusText = job.status === 'completed' ? '✅ 完成'
+                                    : job.status === 'failed' ? '❌ 失败'
+                                    : `⏳ ${stage}（${progress}%）· 已等待 ${elapsedStr}`;
 
-                const result = job.result || {};
-                let detail = '';
-                if (result.extracted_count !== undefined) {
-                    detail += `<br>提取单词：<strong>${result.extracted_count}</strong>`;
-                }
-                if (result.known_count !== undefined) {
-                    detail += `<br>已识别：<strong>${result.known_count}</strong> / 未识别：<strong>${result.unknown_count || 0}</strong>`;
-                }
-                if (result.added_count !== undefined) {
-                    detail += `<br>加入词库：<strong>${result.added_count}</strong>`;
-                }
-                if (result.tts_generated !== undefined) {
-                    detail += `<br>生成音频：<strong>${result.tts_generated}</strong>`;
-                }
-                if (job.error_message) {
-                    detail += `<br><span style="color:#c00">错误：${this._escapeHtml(job.error_message)}</span>`;
-                }
+                    const result = job.result || {};
+                    let detail = '';
+                    detail += `<div style="font-size:0.8rem;color:#666;margin-bottom:4px;">文件 ${fileIndex}/${totalFiles}</div>`;
+                    if (result.extracted_count !== undefined) {
+                        detail += `<br>提取单词：<strong>${result.extracted_count}</strong>`;
+                    }
+                    if (result.known_count !== undefined) {
+                        detail += `<br>已识别：<strong>${result.known_count}</strong> / 未识别：<strong>${result.unknown_count || 0}</strong>`;
+                        this._lastOcrDetail = {
+                            known: result.known_words || [],
+                            unknown: (result.unknown_words || []).map(w => ({ word: w })),
+                            knownCount: result.known_count,
+                            unknownCount: result.unknown_count,
+                        };
+                        detail += `<br><button class="ocr-detail-btn" id="btn-ocr-detail">📊 查看详情</button>`;
+                    }
+                    if (result.added_count !== undefined) {
+                        detail += `<br>加入词库：<strong>${result.added_count}</strong>`;
+                    }
+                    if (result.tts_generated !== undefined) {
+                        detail += `<br>生成音频：<strong>${result.tts_generated}</strong>`;
+                    }
+                    if (job.error_message) {
+                        detail += `<br><span style="color:#c00">错误：${this._escapeHtml(job.error_message)}</span>`;
+                    }
 
-                this._showImportStatus(`
-                    <div class="import-status-block">
-                        <div class="import-status-main">${statusText}</div>
-                        <div class="import-progress-bar"><div class="import-progress-fill" style="width:${progress}%"></div></div>
-                        <div class="import-status-detail">${detail}</div>
-                    </div>
-                `, 'info');
+                    this._showImportStatus(`
+                        <div class="import-status-block">
+                            <div class="import-status-main">${statusText}</div>
+                            <div class="import-progress-bar"><div class="import-progress-fill" style="width:${progress}%"></div></div>
+                            <div class="import-status-detail">${detail}</div>
+                        </div>
+                    `, 'info');
 
-                if (job.status === 'completed') {
-                    this._onImportCompleted(libraryId);
-                    return;
-                }
-                if (job.status === 'failed') {
-                    this._showImportError(`处理失败：${job.error_message || '未知错误'}`);
-                    return;
-                }
-                if (attempts >= maxAttempts) {
-                    // ★ TD-013：30 分钟仍超时 — 真正卡死，给用户手动刷新指引
-                    this._showImportError('处理超时（已等 30 分钟）— 词库后端仍在跑；可刷新页面或在词库管理查看是否已添加');
-                    return;
-                }
-                // 自适应间隔：前 60s 密集，之后放宽
-                const interval = attempts >= slowAfter ? slowInterval : fastInterval;
-                setTimeout(poll, interval);
-            } catch (e) {
-                this._showImportError(`查询进度失败：${e.message}`);
-            }
-        };
+                    const detailBtn = document.getElementById('btn-ocr-detail');
+                    if (detailBtn) {
+                        detailBtn.addEventListener('click', () => this._showOcrDetailModal());
+                    }
 
-        poll();
+                    if (job.status === 'completed') {
+                        resolve();
+                        return;
+                    }
+                    if (job.status === 'failed') {
+                        reject(new Error(job.error_message || '处理失败'));
+                        return;
+                    }
+                    if (attempts >= maxAttempts) {
+                        reject(new Error('处理超时（已等 30 分钟）'));
+                        return;
+                    }
+                    const interval = attempts >= slowAfter ? slowInterval : fastInterval;
+                    setTimeout(poll, interval);
+                } catch (e) {
+                    reject(e);
+                }
+            };
+            poll();
+        });
     }
 
-    _onImportCompleted(libraryId) {
-        const submitBtn = document.getElementById('btn-import-submit');
-        if (submitBtn) {
-            submitBtn.disabled = false;
-            submitBtn.textContent = '🚀 导入更多';
+    /** ★ 显示 OCR/提取单词详情弹窗 */
+    _showOcrDetailModal() {
+        const data = this._lastOcrDetail;
+        if (!data) return;
+        const modal = document.getElementById('ocr-detail-modal');
+        if (!modal) return;
+
+        // 填充摘要
+        const summaryEl = document.getElementById('ocr-detail-summary');
+        if (summaryEl) {
+            summaryEl.textContent = `已识别 ${data.knownCount} 个 · 未识别 ${data.unknownCount} 个`;
         }
-        // 刷新当前词库的单词列表
-        if (typeof librariesManager !== 'undefined') {
-            librariesManager.refreshLibrary(libraryId).then(() => {
-                console.log('[import] 词库已刷新');
-            });
+
+        // 已识别列表
+        const knownList = document.getElementById('ocr-known-list');
+        const knownCount = document.getElementById('ocr-known-count');
+        if (knownCount) knownCount.textContent = data.known.length;
+        if (knownList) {
+            knownList.innerHTML = '';
+            if (data.known.length === 0) {
+                knownList.innerHTML = '<div class="ocr-word-empty">暂无数据</div>';
+            } else {
+                data.known.forEach(item => {
+                    const div = document.createElement('div');
+                    div.className = 'ocr-word-item';
+                    div.innerHTML = `<span class="word">${this._escapeHtml(item.word)}</span><span class="meaning">${this._escapeHtml(item.meaning || '')}</span>`;
+                    knownList.appendChild(div);
+                });
+            }
         }
+
+        // 未识别列表
+        const unknownList = document.getElementById('ocr-unknown-list');
+        const unknownCount = document.getElementById('ocr-unknown-count');
+        if (unknownCount) unknownCount.textContent = data.unknown.length;
+        if (unknownList) {
+            unknownList.innerHTML = '';
+            if (data.unknown.length === 0) {
+                unknownList.innerHTML = '<div class="ocr-word-empty">全部已识别 ✅</div>';
+            } else {
+                data.unknown.forEach(item => {
+                    const div = document.createElement('div');
+                    div.className = 'ocr-word-item';
+                    div.innerHTML = `<span class="word">${this._escapeHtml(item.word)}</span><span class="meaning" style="color:#c00">未识别</span>`;
+                    unknownList.appendChild(div);
+                });
+            }
+        }
+
+        // 显示弹窗
+        modal.classList.add('active');
+
+        // 绑定关闭按钮
+        const closeBtn = document.getElementById('btn-ocr-detail-close');
+        const onClose = () => {
+            modal.classList.remove('active');
+            closeBtn?.removeEventListener('click', onClose);
+            modal.removeEventListener('click', onBackdrop);
+        };
+        const onBackdrop = (e) => { if (e.target === modal) onClose(); };
+        closeBtn?.addEventListener('click', onClose);
+        modal.addEventListener('click', onBackdrop);
     }
 
     _showImportStatus(html, type = 'info') {

@@ -26,7 +26,7 @@ class LibrariesManager {
     }
 
     /**
-     * 初始化：加载默认词库 + 恢复用户词库 + 恢复当前选择
+     * 初始化：加载默认词库 + 恢复用户词库 + 恢复当前选择 + 从后端同步
      */
     async init() {
         await this._loadDefaultLibrary();
@@ -48,6 +48,9 @@ class LibrariesManager {
             console.warn('加载用户词库失败：', e);
         }
 
+        // ★ 从后端 API 同步词库（合并到 localStorage）
+        await this._syncFromBackend();
+
         try {
             const savedCurrent = localStorage.getItem('wordGameCurrentLibraryId');
             if (savedCurrent && this.libraries.some(l => l.id === savedCurrent)) {
@@ -58,6 +61,102 @@ class LibrariesManager {
         }
 
         return true;
+    }
+
+    /**
+     * ★ 从后端 API 同步词库列表到 localStorage
+     * 匹配规则：按名字匹配（不区分大小写）
+     *   - 后端有 / localStorage 有 → 用后端的 ID 覆盖
+     *   - 后端有 / localStorage 无 → 添加到 localStorage
+     *   - 后端无 / localStorage 有 → 保留（后续上传会同步）
+     */
+    async _syncFromBackend() {
+        const backendUrl = (window.MINIMAX_CONFIG && window.MINIMAX_CONFIG.backendUrl) || 'http://127.0.0.1:8765';
+        try {
+            const resp = await fetch(`${backendUrl}/api/libraries`, {
+                headers: typeof authManager !== 'undefined' ? authManager.getAuthHeaders() : {},
+            });
+            if (!resp.ok) return;
+            const backendLibs = await resp.json();
+            if (!Array.isArray(backendLibs) || backendLibs.length === 0) return;
+
+            let changed = false;
+            const nameToLocal = new Map();
+            for (const lib of this.libraries) {
+                if (!lib.isDefault) {
+                    nameToLocal.set(lib.name.toLowerCase(), lib);
+                }
+            }
+
+            for (const bLib of backendLibs) {
+                if (bLib.is_default) continue;
+                const key = bLib.name.toLowerCase();
+                const localLib = nameToLocal.get(key);
+
+                if (localLib) {
+                    // 后端存在 && localStorage 也存在 → 用后端 ID 更新
+                    if (localLib.id !== bLib.id) {
+                        // 如果 localStorage 有单词，先迁移到新 ID
+                        const oldWords = this.words[localLib.id];
+                        if (oldWords && oldWords.length > 0) {
+                            this.words[bLib.id] = oldWords;
+                            this.loaded[bLib.id] = true;
+                            delete this.words[localLib.id];
+                            delete this.loaded[localLib.id];
+                            try { localStorage.removeItem(`wordGameLibrary_${localLib.id}_words`); } catch (e) {}
+                        }
+                        // 更新库信息为后端 ID
+                        localLib.id = bLib.id;
+                        localLib.wordCount = bLib.word_count;
+                        localLib.levelCount = bLib.level_count;
+                        // 如果当前选中的是旧 ID，更新为后端 ID
+                        if (this.currentLibraryId === localLib.id) {
+                            this.currentLibraryId = bLib.id;
+                        }
+                        changed = true;
+                    }
+                    // 从后端刷新单词数
+                    if (bLib.word_count !== undefined) {
+                        localLib.wordCount = bLib.word_count;
+                        localLib.levelCount = bLib.level_count;
+                    }
+                } else {
+                    // 后端存在 && localStorage 不存在 → 添加到 localStorage
+                    const newLib = {
+                        id: bLib.id,
+                        name: bLib.name,
+                        isDefault: false,
+                        source: bLib.source || 'import',
+                        createdAt: new Date(bLib.created_at || Date.now()).getTime(),
+                        wordCount: bLib.word_count || 0,
+                        levelCount: bLib.level_count || 1,
+                    };
+                    this.libraries.push(newLib);
+                    this.words[newLib.id] = [];   // 占位，后续 refresh
+                    this.loaded[newLib.id] = false;
+                    nameToLocal.set(key, newLib);
+                    changed = true;
+                    // ★ 异步从后端加载单词（fire-and-forget，不阻塞 init）
+                    this.refreshLibrary(newLib.id).then(result => {
+                        if (result.refreshed > 0) {
+                            newLib.wordCount = result.refreshed;
+                            newLib.levelCount = this._calcLevelCount(newLib.id, result.refreshed);
+                            this._saveUserLibraries();
+                        }
+                    }).catch(e => console.warn(`[LibrariesManager] 加载词库 ${newLib.id} 单词失败:`, e));
+                }
+            }
+
+            if (changed) {
+                this._saveUserLibraries();
+                // 如果当前词库的 ID 变了，更新 localStorage 中的当前选择
+                try { localStorage.setItem('wordGameCurrentLibraryId', this.currentLibraryId); } catch (e) {}
+            }
+            console.log(`[LibrariesManager] 后端同步完成: ${backendLibs.length} 个后端词库`);
+        } catch (e) {
+            // 网络错误或未登录时静默跳过
+            console.warn('[LibrariesManager] 后端同步失败（可忽略）:', e.message);
+        }
     }
 
     async _loadDefaultLibrary() {
@@ -287,6 +386,52 @@ class LibrariesManager {
         return true;
     }
 
+    // ==================== 后端同步 ====================
+
+    /**
+     * ★ 从后端 API 刷新词库单词（pipeline 完成后调用）
+     * 取回最新单词列表并保存到 localStorage
+     */
+    async refreshLibrary(libraryId) {
+        if (libraryId === DEFAULT_LIBRARY_ID) return { refreshed: 0 };
+        const backendUrl = (window.MINIMAX_CONFIG && window.MINIMAX_CONFIG.backendUrl) || 'http://127.0.0.1:8765';
+        try {
+            const resp = await fetch(`${backendUrl}/api/libraries/${libraryId}/words`, {
+                headers: typeof authManager !== 'undefined' ? authManager.getAuthHeaders() : {},
+            });
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+            const words = await resp.json();
+            // 转换为 LibrariesManager 内部格式
+            const formatted = words.map(w => {
+                // ★ 修复路径前缀：pipeline 存的是"audio/"但前端静态路径是"sounds/"
+                let audioEn = (w.audio_en || '').replace(/^audio\//, 'sounds/');
+                let audioZh = (w.audio_zh || '').replace(/^audio\//, 'sounds/');
+                return {
+                    word: w.word,
+                    meaning: w.meaning || '',
+                    difficulty: w.difficulty || 5,
+                    letter_count: w.word ? w.word.length : 0,
+                    syllable_count: w.syllable_count || 1,
+                    audio_en: audioEn,
+                    audio_zh: audioZh,
+                };
+            });
+            this._saveWordsToStorage(libraryId, formatted);
+            // 同步更新 library 元数据
+            const lib = this.libraries.find(l => l.id === libraryId);
+            if (lib) {
+                lib.wordCount = formatted.length;
+                lib.levelCount = this._calcLevelCount(libraryId, formatted.length);
+            }
+            this._saveUserLibraries();
+            console.log(`[LibrariesManager] 词库 ${libraryId} 已刷新：${formatted.length} 词`);
+            return { refreshed: formatted.length };
+        } catch (e) {
+            console.warn(`[LibrariesManager] 刷新词库 ${libraryId} 失败：`, e);
+            return { refreshed: 0, error: e.message };
+        }
+    }
+
     // ==================== 单词增删去重 ====================
 
     /**
@@ -315,8 +460,8 @@ class LibrariesManager {
                 difficulty: w.difficulty || 5,
                 letter_count: w.letter_count || (w.word || '').length,
                 syllable_count: w.syllable_count || 1,
-                audio_en: w.audio_en || `sounds/en/${safeFilename(w.word)}.mp3`,
-                audio_zh: w.audio_zh || `sounds/zh/${safeFilename(w.meaning || w.word)}.mp3`,
+                audio_en: (w.audio_en || `sounds/en/${safeFilename(w.word)}.mp3`).replace(/^audio\//, 'sounds/'),
+                audio_zh: (w.audio_zh || `sounds/zh/${safeFilename(w.meaning || w.word)}.mp3`).replace(/^audio\//, 'sounds/'),
                 createdAt: Date.now(),
             });
         }

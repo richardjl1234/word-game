@@ -1,13 +1,14 @@
 """
 英→中 词典服务（task #30）：
-- 启动时加载 game/data/words.json 为 {word.lower() → meaning} dict
+- 主词典：game/data/cc-cedict.json（~49k 词条，来自 CC-CEDICT 开源英中词典）
+- 补充词典：game/data/words.json（~2.8k 词条，游戏词库，优先级更高覆盖冲突）
 - lookup(word) 返回中文释义；找不到返回 None
 - lookup_batch(words) 返回 {word: meaning_or_None}
 
 设计要点：
-- 内存 dict，2889 条 ~100KB，一次加载终身缓存
+- 内存 dict，一次加载终身缓存
 - 不依赖外部 API（无网即可用）
-- 支持运行时 reload（热更新 words.json 后调用 load_dictionary(force=True)）
+- 支持运行时 reload（热更新文件后调用 load_dictionary(force=True)）
 """
 import json
 import logging
@@ -17,9 +18,9 @@ from typing import Dict, Optional, Iterable, Tuple
 
 logger = logging.getLogger(__name__)
 
-# 词库 JSON 路径（相对于 backend/ 目录的 project root）
 _PROJECT_ROOT = Path(__file__).resolve().parents[3]
-_WORDS_JSON = _PROJECT_ROOT / "game" / "data" / "words.json"
+_CC_CEDICT_PATH = _PROJECT_ROOT / "game" / "data" / "cc-cedict.json"
+_WORDS_JSON_PATH = _PROJECT_ROOT / "game" / "data" / "words.json"
 
 _dict_cache: Dict[str, str] = {}
 _lock = threading.Lock()
@@ -27,32 +28,55 @@ _loaded = False
 
 
 def _do_load() -> Dict[str, str]:
-    """从 words.json 加载词典（线程安全）"""
-    if not _WORDS_JSON.exists():
-        logger.warning(f"词典文件不存在: {_WORDS_JSON}（将返回空 dict）")
-        return {}
-    try:
-        data = json.loads(_WORDS_JSON.read_text(encoding="utf-8"))
-        # 支持两种 schema：{words: [...]} 或 直接 [...]
-        if isinstance(data, dict) and "words" in data:
-            words_list = data["words"]
-        elif isinstance(data, list):
-            words_list = data
-        else:
-            logger.warning(f"未识别的 words.json schema")
-            return {}
+    """
+    加载词典（优先级：words.json > CC-CEDICT）
+    - 先加载 CC-CEDICT（~49k 词条，覆盖面广但释义可能不够精准）
+    - 然后用 words.json 覆盖冲突（2889 词，释义更贴近教育场景）
+    两者合并得到最终词典。
+    """
+    result = {}
 
-        result = {}
-        for w in words_list:
-            word = w.get("word", "").strip().lower()
-            meaning = w.get("meaning", "").strip()
-            if word and meaning and word not in result:
-                result[word] = meaning
-        logger.info(f"词典加载完成: {len(result)} 个词 from {_WORDS_JSON}")
-        return result
-    except Exception as e:
-        logger.error(f"词典加载失败: {e}")
-        return {}
+    # 1. 加载 CC-CEDICT（主词典）
+    if _CC_CEDICT_PATH.exists():
+        try:
+            data = json.loads(_CC_CEDICT_PATH.read_text(encoding="utf-8"))
+            entries = data.get("dictionary", {})
+            for word, meanings in entries.items():
+                if meanings:
+                    # 取第一个释义作为中文翻译
+                    result[word.lower().strip()] = meanings[0]
+            logger.info(f"CC-CEDICT 加载: {len(entries)} 词条 from {_CC_CEDICT_PATH.name}")
+        except Exception as e:
+            logger.error(f"CC-CEDICT 加载失败: {e}")
+    else:
+        logger.warning(f"CC-CEDICT 文件不存在: {_CC_CEDICT_PATH}，跳过")
+
+    # 2. 用 words.json 覆盖（游戏词库的释义更精确）
+    if _WORDS_JSON_PATH.exists():
+        try:
+            data = json.loads(_WORDS_JSON_PATH.read_text(encoding="utf-8"))
+            if isinstance(data, dict) and "words" in data:
+                words_list = data["words"]
+            elif isinstance(data, list):
+                words_list = data
+            else:
+                words_list = []
+            overridden = 0
+            for w in words_list:
+                word = w.get("word", "").strip().lower()
+                meaning = w.get("meaning", "").strip()
+                if word and meaning:
+                    if word in result:
+                        overridden += 1
+                    result[word] = meaning
+            logger.info(f"words.json 覆盖: {len(words_list)} 词（{overridden} 个覆盖 CC-CEDICT）")
+        except Exception as e:
+            logger.error(f"words.json 加载失败: {e}")
+    else:
+        logger.warning(f"words.json 文件不存在: {_WORDS_JSON_PATH}，跳过")
+
+    logger.info(f"词典最终加载完成: {len(result)} 个词")
+    return result
 
 
 def load_dictionary(force: bool = False) -> Dict[str, str]:

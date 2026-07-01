@@ -8,9 +8,9 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Comic+Neue:wght@400;700&family=Quicksand:wght@400;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="css/theme.css?v=38">
-    <link rel="stylesheet" href="css/style.css?v=38">
-    <link rel="stylesheet" href="css/animations.css?v=38">
+    <link rel="stylesheet" href="css/theme.css?v=41">
+    <link rel="stylesheet" href="css/style.css?v=41">
+    <link rel="stylesheet" href="css/animations.css?v=41">
 </head>
 <body>
     <!-- 全局背景装饰（在所有界面显示） -->
@@ -389,10 +389,15 @@
                     <strong>目标词库：</strong><span id="import-target-library">（请先选择）</span>
                 </div>
                 <div id="import-drop-zone" class="import-drop-zone">
-                    <input type="file" id="import-file-input" accept=".mp3,.wav,.m4a,.pdf,.txt,.docx,.png,.jpg,.jpeg,.webp,.bmp" hidden>
+                    <input type="file" id="import-file-input" accept=".mp3,.wav,.m4a,.pdf,.txt,.docx,.png,.jpg,.jpeg,.webp,.bmp" multiple hidden>
+                    <input type="file" id="import-folder-input" webkitdirectory hidden>
                     <div class="import-drop-hint">
-                        📁 点击选择文件 或 拖拽到此处<br>
+                        📁 拖拽文件到此处<br>
                         <small>支持 MP3 / WAV / M4A / PDF / TXT / DOCX / 🖼️ 图片（OCR 自动识别）— 最大 200MB</small>
+                    </div>
+                    <div class="import-pick-buttons">
+                        <button type="button" id="btn-pick-files" class="btn-small btn-primary">📂 选择文件</button>
+                        <button type="button" id="btn-pick-folder" class="btn-small btn-secondary">📁 选择文件夹</button>
                     </div>
                 </div>
                 <div id="import-file-info" class="import-file-info">
@@ -404,6 +409,31 @@
                 <div class="import-actions">
                     <button id="btn-import-submit" class="btn-primary" disabled>🚀 开始导入</button>
                     <p class="import-wait-hint">⏳ 完整功能需后端 API 支持（研发中）</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- ★ OCR/提取详情弹窗 -->
+        <div id="ocr-detail-modal" class="modal">
+            <div class="modal-content ocr-detail-content">
+                <h3>📊 单词识别详情</h3>
+                <p class="modal-hint" id="ocr-detail-summary">已识别 N 个 · 未识别 N 个</p>
+                <div class="ocr-detail-body">
+                    <div class="ocr-detail-column">
+                        <h4>✅ 已识别（<span id="ocr-known-count">0</span>）</h4>
+                        <div class="ocr-word-list" id="ocr-known-list">
+                            <!-- 动态生成 -->
+                        </div>
+                    </div>
+                    <div class="ocr-detail-column">
+                        <h4>❌ 未识别（<span id="ocr-unknown-count">0</span>）</h4>
+                        <div class="ocr-word-list" id="ocr-unknown-list">
+                            <!-- 动态生成 -->
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-buttons">
+                    <button id="btn-ocr-detail-close" class="btn-secondary">关闭</button>
                 </div>
             </div>
         </div>
@@ -432,17 +462,17 @@
                 <div class="modal-buttons">
                     <button id="btn-confirm-password-change" class="btn-primary">确认修改</button>
 
-    <script src="lib/lottie.min.js?v=37"></script>
-    <script src="js/config.js?v=37"></script>
-    <script src="js/soundManager.js?v=37"></script>
-    <script src="js/animationPlayer.js?v=37"></script>
-    <script src="js/backgroundAnimator.js?v=37"></script>
-    <script src="js/authManager.js?v=37"></script>
-    <script src="js/usersManager.js?v=37"></script>
-    <script src="js/librariesManager.js?v=37"></script>
-    <script src="js/wordManager.js?v=37"></script>
-    <script src="js/collision.js?v=37"></script>
-    <script src="js/game.js?v=37"></script>
-    <script src="js/gamepadController.js?v=37"></script>
+    <script src="lib/lottie.min.js?v=41"></script>
+    <script src="js/config.js?v=41"></script>
+    <script src="js/soundManager.js?v=41"></script>
+    <script src="js/animationPlayer.js?v=41"></script>
+    <script src="js/backgroundAnimator.js?v=41"></script>
+    <script src="js/authManager.js?v=41"></script>
+    <script src="js/usersManager.js?v=41"></script>
+    <script src="js/librariesManager.js?v=41"></script>
+    <script src="js/wordManager.js?v=41"></script>
+    <script src="js/collision.js?v=41"></script>
+    <script src="js/game.js?v=41"></script>
+    <script src="js/gamepadController.js?v=41"></script>
 </body>
 </html>
