@@ -1251,10 +1251,9 @@ class Game {
         // 游戏中：单词焦点导航
         if (this.currentScreen === 'game-screen' && this.isRunning && !this.isPaused) {
             let dir = 0;
-            if (this.gamepadController.consumeDpadLeft()) dir = -1;
-            if (this.gamepadController.consumeDpadRight()) dir = 1;
+            if (this.gamepadController.consumeDpadLeft()) { this.snapFocusByStick(-1); dir = 1; }
+            if (this.gamepadController.consumeDpadRight()) { this.snapFocusByStick(1); dir = 1; }
             if (dir !== 0) {
-                this.cycleWordFocus(dir);
                 this.stickFocusTimer = 0.3;  // 摇杆移动冷却 300ms
             } else {
                 // 左摇杆连续移动（snap 到最近单词）
@@ -1263,7 +1262,7 @@ class Game {
                     const stickX = this.gamepadController.getLeftStickX();
                     if (Math.abs(stickX) > 0.3) {
                         this.snapFocusByStick(stickX);
-                        this.stickFocusTimer = 0.18;
+                        this.stickFocusTimer = 0.25;
                     }
                 }
             }
@@ -1361,25 +1360,28 @@ class Game {
         this.applyWordFocus();
     }
 
-    /** 摇杆：snap 到最接近当前 X 方向 + 摇杆方向的 alive 单词 */
+    /** 摇杆：根据物理 X 坐标方向 snap — 摇杆左找左边最近词，摇杆右找右边最近词 */
     snapFocusByStick(stickX) {
         const alive = this.aliveWordBubbles();
         if (alive.length === 0) return;
         const current = alive[this.focusedIndex] || alive[0];
         const currentRect = current.element.getBoundingClientRect();
         const currentX = currentRect.left + currentRect.width / 2;
-        const areaWidth = this.elements.wordArea.offsetWidth || window.innerWidth;
-        const targetX = currentX + stickX * areaWidth * 0.5;
 
-        let best = 0;
+        const goingLeft = stickX < 0;
+        let best = -1;
         let bestDist = Infinity;
         for (let i = 0; i < alive.length; i++) {
+            if (i === this.focusedIndex) continue;
             const r = alive[i].element.getBoundingClientRect();
             const cx = r.left + r.width / 2;
-            const d = Math.abs(cx - targetX);
-            if (d < bestDist) { bestDist = d; best = i; }
+            const dx = goingLeft ? currentX - cx : cx - currentX;
+            if (dx > 0 && dx < bestDist) {
+                bestDist = dx;
+                best = i;
+            }
         }
-        if (best !== this.focusedIndex) {
+        if (best !== -1 && best !== this.focusedIndex) {
             this.focusedIndex = best;
             this.applyWordFocus();
         }
