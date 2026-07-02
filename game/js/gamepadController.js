@@ -164,6 +164,24 @@ class GamepadController {
     }
 
     /**
+     * 左摇杆 Y 轴（应用死区）
+     * 返回 [-1, 1]，死区内返回 0
+     */
+    getLeftStickY() {
+        if (!this.connected) return 0;
+        const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+        for (let i = 0; i < pads.length; i++) {
+            if (pads[i]) {
+                const y = pads[i].axes[1] || 0;
+                if (Math.abs(y) < this.deadzone) return 0;
+                const sign = y > 0 ? 1 : -1;
+                return sign * (Math.abs(y) - this.deadzone) / (1 - this.deadzone);
+            }
+        }
+        return 0;
+    }
+
+    /**
      * 振动反馈
      * @param {string} type - 'miss'(短促轻震) 或 'celebrate'(庆祝强震)
      * 优先用 gamepad.vibrationActuator（Chrome 标准），降级用 navigator.vibrate

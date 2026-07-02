@@ -1251,17 +1251,26 @@ class Game {
         // 游戏中：单词焦点导航
         if (this.currentScreen === 'game-screen' && this.isRunning && !this.isPaused) {
             let dir = 0;
-            if (this.gamepadController.consumeDpadLeft()) { this.snapFocusByStick(-1); dir = 1; }
-            if (this.gamepadController.consumeDpadRight()) { this.snapFocusByStick(1); dir = 1; }
+            if (this.gamepadController.consumeDpadLeft())  { this.snapFocus(-1, 'x'); dir = 1; }
+            if (this.gamepadController.consumeDpadRight()) { this.snapFocus(1, 'x');  dir = 1; }
+            if (this.gamepadController.consumeDpadUp())    { this.snapFocus(-1, 'y'); dir = 1; }
+            if (this.gamepadController.consumeDpadDown())  { this.snapFocus(1, 'y');  dir = 1; }
             if (dir !== 0) {
                 this.stickFocusTimer = 0.3;  // 摇杆移动冷却 300ms
             } else {
-                // 左摇杆连续移动（snap 到最近单词）
+                // 左摇杆连续移动（dominant 轴决定方向，右摇杆不用）
                 this.stickFocusTimer = Math.max(0, this.stickFocusTimer - deltaTime);
                 if (this.stickFocusTimer === 0) {
                     const stickX = this.gamepadController.getLeftStickX();
-                    if (Math.abs(stickX) > 0.3) {
-                        this.snapFocusByStick(stickX);
+                    const stickY = this.gamepadController.getLeftStickY();
+                    const absX = Math.abs(stickX);
+                    const absY = Math.abs(stickY);
+                    if (absX > 0.3 || absY > 0.3) {
+                        if (absX >= absY) {
+                            this.snapFocus(stickX, 'x');
+                        } else {
+                            this.snapFocus(stickY, 'y');
+                        }
                         this.stickFocusTimer = 0.25;
                     }
                 }
@@ -1360,24 +1369,26 @@ class Game {
         this.applyWordFocus();
     }
 
-    /** 摇杆：根据物理 X 坐标方向 snap — 摇杆左找左边最近词，摇杆右找右边最近词 */
-    snapFocusByStick(stickX) {
+    /** 根据物理坐标方向 snap — 左/右（x 轴）或上/下（y 轴）找最近单词 */
+    snapFocus(direction, axis = 'x') {
         const alive = this.aliveWordBubbles();
         if (alive.length === 0) return;
         const current = alive[this.focusedIndex] || alive[0];
         const currentRect = current.element.getBoundingClientRect();
-        const currentX = currentRect.left + currentRect.width / 2;
+        const currentCenter = axis === 'x'
+            ? currentRect.left + currentRect.width / 2
+            : currentRect.top + currentRect.height / 2;
 
-        const goingLeft = stickX < 0;
+        const goingNegative = direction < 0;
         let best = -1;
         let bestDist = Infinity;
         for (let i = 0; i < alive.length; i++) {
             if (i === this.focusedIndex) continue;
             const r = alive[i].element.getBoundingClientRect();
-            const cx = r.left + r.width / 2;
-            const dx = goingLeft ? currentX - cx : cx - currentX;
-            if (dx > 0 && dx < bestDist) {
-                bestDist = dx;
+            const ci = axis === 'x' ? r.left + r.width / 2 : r.top + r.height / 2;
+            const diff = goingNegative ? currentCenter - ci : ci - currentCenter;
+            if (diff > 0 && diff < bestDist) {
+                bestDist = diff;
                 best = i;
             }
         }
